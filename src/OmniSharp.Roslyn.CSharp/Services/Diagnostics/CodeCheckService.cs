@@ -23,6 +23,9 @@ namespace OmniSharp.Roslyn.CSharp.Services.Diagnostics
 
         public async Task<QuickFixResponse> Handle(CodeCheckRequest request)
         {
+            _workspace.QueueProjectLoadForFile(request.FileName);
+            await _workspace.WaitForQueueEmptyAsync();
+
             var documents = request.FileName != null
                 ? _workspace.GetDocuments(request.FileName)
                 : _workspace.CurrentSolution.Projects.SelectMany(project => project.Documents);

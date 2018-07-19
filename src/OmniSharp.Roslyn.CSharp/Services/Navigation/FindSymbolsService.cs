@@ -9,12 +9,16 @@ using OmniSharp.Extensions;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.FindSymbols;
+using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
     [OmniSharpHandler(OmniSharpEndpoints.FindSymbols, LanguageNames.CSharp)]
     public class FindSymbolsService : IRequestHandler<FindSymbolsRequest, QuickFixResponse>
     {
+        private const int MaxSymbolsToReturn = 100;
+        private static readonly TimeSpan QueryCodeSearchTimeout = TimeSpan.FromSeconds(5);
+
         private OmniSharpWorkspace _workspace;
 
         [ImportingConstructor]
@@ -30,15 +34,26 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 ? candidate.IsValidCompletionFor(request.Filter)
                 : true;
 
-            return await FindSymbols(isMatch);
+            if (HackOptions.Enabled && (string.IsNullOrEmpty(request.Filter) || request.Filter.Length < 2))
+            {
+                return new QuickFixResponse(new List<QuickFix>());
+            }
+
+            Task<List<QuickFix>> queryCodeSearchTask = Task.FromResult(new List<QuickFix>());
+            if (HackOptions.Enabled)
+            {
+                queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 10, QueryCodeSearchTimeout);
+            }
+
+            return await FindSymbols(isMatch, queryCodeSearchTask);
         }
 
-        private async Task<QuickFixResponse> FindSymbols(Func<string, bool> predicate)
+        private async Task<QuickFixResponse> FindSymbols(Func<string, bool> predicate, Task<List<QuickFix>> queryCodeSearchTask)
         {
             var symbols = await SymbolFinder.FindSourceDeclarationsAsync(_workspace.CurrentSolution, predicate, SymbolFilter.TypeAndMember);
 
             var symbolLocations = new List<QuickFix>();
-            foreach(var symbol in symbols)
+            foreach(var symbol in symbols.Take(MaxSymbolsToReturn))
             {
                 // for partial methods, pick the one with body
                 var s = symbol;
@@ -52,6 +67,8 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                     symbolLocations.Add(ConvertSymbol(symbol, location));
                 }
             }
+
+            symbolLocations.AddRange(await queryCodeSearchTask);
 
             return new QuickFixResponse(symbolLocations.Distinct());
         }

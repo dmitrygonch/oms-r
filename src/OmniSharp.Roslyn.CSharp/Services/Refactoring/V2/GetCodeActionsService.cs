@@ -26,6 +26,9 @@ namespace OmniSharp.Roslyn.CSharp.Services.Refactoring.V2
 
         public override async Task<GetCodeActionsResponse> Handle(GetCodeActionsRequest request)
         {
+            Workspace.QueueProjectLoadForFile(request.FileName);
+            await Workspace.WaitForQueueEmptyAsync();
+
             var availableActions = await GetAvailableCodeActions(request);
 
             return new GetCodeActionsResponse

@@ -23,6 +23,9 @@ namespace OmniSharp.Roslyn.CSharp.Services.Structure
 
         public async Task<FileMemberTree> Handle(MembersTreeRequest request)
         {
+            _workspace.QueueProjectLoadForFile(request.FileName);
+            await _workspace.WaitForQueueEmptyAsync();
+
             return new FileMemberTree()
             {
                 TopLevelTypeDefinitions = await StructureComputer.Compute(_workspace.GetDocuments(request.FileName), _discovers)

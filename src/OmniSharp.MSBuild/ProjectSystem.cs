@@ -111,6 +111,14 @@ namespace OmniSharp.MSBuild
 
         private IEnumerable<string> GetInitialProjectPaths()
         {
+            if (HackOptions.Enabled)
+            {
+                _workspace.InitCodeSearch();
+
+                _logger.LogDebug($"Skipped looking for initial projects to load");
+                return Array.Empty<string>();
+            }
+
             // If a solution was provided, use it.
             if (!string.IsNullOrEmpty(_environment.SolutionFilePath))
             {

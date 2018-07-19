@@ -95,9 +95,25 @@ namespace OmniSharp.MSBuild
 
         public async Task WaitForQueueEmptyAsync()
         {
-            while (_queue.Count > 0 || _processingQueue)
+            while (IsLoadingProjects())
             {
                 await Task.Delay(LoopDelay);
+            }
+        }
+
+        private bool IsLoadingProjects()
+        {
+            return _queue.Count > 0 || _processingQueue || _workspace.ProjectFilesToLoad.Count > 0;
+        }
+
+        private void ProcessProjectsQueuedByRequests()
+        {
+            while(!_workspace.ProjectFilesToLoad.IsEmpty)
+            {
+                if (_workspace.ProjectFilesToLoad.TryDequeue(out string projectFile))
+                {
+                    QueueProjectUpdate(projectFile, true);
+                }
             }
         }
 
@@ -106,6 +122,8 @@ namespace OmniSharp.MSBuild
             while (true)
             {
                 await Task.Delay(LoopDelay, cancellationToken);
+                _workspace.IsLoadingProjects = IsLoadingProjects();
+                ProcessProjectsQueuedByRequests();
                 ProcessQueue(cancellationToken);
             }
         }

@@ -141,6 +141,11 @@ namespace OmniSharp
 
                 _logger.LogDebug($"Querying VSTS Code Search with filter '{filter}'");
                 SearchHttpClient client = await GetSearchClientAsync();
+                if (client == null)
+                {
+                    return new List<QuickFix>();
+                }
+
                 using (var ct = new CancellationTokenSource(maxDuration))
                 {
                     Stopwatch sw = Stopwatch.StartNew();

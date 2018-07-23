@@ -8,14 +8,17 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Services.Client;
+using Microsoft.VisualStudio.Services.Search.Shared.WebApi.Contracts;
 using Microsoft.VisualStudio.Services.Search.WebApi;
 using Microsoft.VisualStudio.Services.Search.WebApi.Contracts.Code;
 using Microsoft.VisualStudio.Services.WebApi;
 using OmniSharp.Models;
+using OmniSharp.Models.V2;
 using OmniSharp.Options;
 using OmniSharp.Roslyn;
 using OmniSharp.Utilities;
@@ -154,16 +157,7 @@ namespace OmniSharp
 
                     if (response != null)
                     {
-                        result = response.Results.Select(r => new QuickFix()
-                        {
-                            Text = Path.GetFileNameWithoutExtension(r.Filename),
-                            FileName = Path.Combine(_repoRoot, r.Path.TrimStart('/').Replace('/', '\\')),
-                            Line = 0,
-                            Column = 0,
-                            EndLine = 0,
-                            EndColumn = 0,
-                            Projects = new List<string>()
-                        }).ToList();
+                        result = await GetQuickFixesFromCodeResults(response.Results);
                     }
                 }
             }
@@ -173,6 +167,100 @@ namespace OmniSharp
             }
 
             return result ?? new List<QuickFix>();
+        }
+
+        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults)
+        {
+            var transform = new TransformBlock<CodeResult, List<QuickFix>>(codeResult =>
+            {
+                string filePath = Path.Combine(_repoRoot, codeResult.Path.TrimStart('/').Replace('/', '\\'));
+                if (!File.Exists(filePath))
+                {
+                    _logger.LogDebug($"File {filePath} from CodeResult doesn't exist");
+                    return null;
+                }
+
+                return GetQuickFixeFromCodeResult(codeResult, filePath);
+            },
+            new ExecutionDataflowBlockOptions
+            {
+                MaxDegreeOfParallelism = System.Environment.ProcessorCount - 1,
+                BoundedCapacity = DataflowBlockOptions.Unbounded
+            });
+
+            var buffer = new BufferBlock<List<QuickFix>>();
+            transform.LinkTo(buffer, new DataflowLinkOptions { PropagateCompletion = true });
+
+            foreach(CodeResult codeResult in codeResults)
+            {
+                await transform.SendAsync(codeResult);
+            }
+            transform.Complete();
+
+            var allFoundSymbols = new List<QuickFix>();
+            while (await buffer.OutputAvailableAsync().ConfigureAwait(false))
+            {
+                foreach (List<QuickFix> symbols in buffer.ReceiveAll().Where(item => item != null))
+                {
+                    allFoundSymbols.AddRange(symbols);
+                }
+            }
+
+            // Propagate an exception if it occurred
+            await buffer.Completion;
+            return allFoundSymbols;
+        }
+
+        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath)
+        {
+            var foundSymbols = new List<QuickFix>();
+            if (codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHits))
+            {
+                int lineOffset = 0;
+                int lineNumber = 0;
+                foreach (string line in File.ReadLines(filePath))
+                {
+                    foreach (Hit hit in contentHits.OrderBy(h => h.CharOffset))
+                    {
+                        if (hit.CharOffset >= lineOffset && hit.CharOffset < lineOffset + line.Length)
+                        {
+                            var symbolLocation = new SymbolLocation
+                            {
+                                Kind = SymbolKinds.Unknown,
+                                FileName = filePath,
+                                Line = lineNumber,
+                                EndLine = lineNumber,
+                                Column = hit.CharOffset - lineOffset,
+                                EndColumn = hit.CharOffset - lineOffset + hit.Length,
+                                Projects = new List<string>()
+                            };
+                            symbolLocation.Text = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
+                            foundSymbols.Add(symbolLocation);
+                        }
+                    }
+
+                    lineOffset += line.Length + Environment.NewLine.Length;
+                    lineNumber++;
+                }
+            }
+            else
+            {
+                var symbolLocation = new SymbolLocation()
+                {
+                    Kind = SymbolKinds.Unknown,
+                    Text = Path.GetFileNameWithoutExtension(codeResult.Filename),
+                    FileName = filePath,
+                    Line = 0,
+                    Column = 0,
+                    EndLine = 0,
+                    EndColumn = 0,
+                    Projects = new List<string>()
+
+                };
+                foundSymbols.Add(symbolLocation);
+                _logger.LogDebug($"No content matches found for {filePath}");
+            }
+            return foundSymbols;
         }
 
         private async Task<SearchHttpClient> GetSearchClientAsync()
@@ -234,12 +322,12 @@ namespace OmniSharp
             OnProjectAdded(projectInfo);
         }
 
-        public void AddProjectReference(ProjectId projectId, ProjectReference projectReference)
+        public void AddProjectReference(ProjectId projectId, Microsoft.CodeAnalysis.ProjectReference projectReference)
         {
             OnProjectReferenceAdded(projectId, projectReference);
         }
 
-        public void RemoveProjectReference(ProjectId projectId, ProjectReference projectReference)
+        public void RemoveProjectReference(ProjectId projectId, Microsoft.CodeAnalysis.ProjectReference projectReference)
         {
             OnProjectReferenceRemoved(projectId, projectReference);
         }

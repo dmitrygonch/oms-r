@@ -56,9 +56,6 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             // Get symbols from Roslyn first and store the list preserving the order
             IEnumerable<ISymbol> symbols = await SymbolFinder.FindSourceDeclarationsAsync(_workspace.CurrentSolution, predicate, SymbolFilter.TypeAndMember);
 
-            // Hash symbols from Roslyn to use to avoid dupes
-            HashSet<QuickFix> uniqueSymbols = new HashSet<QuickFix>(QuickFixEqualityComparer.Instance);
-
             var symbolLocations = new List<QuickFix>();
             foreach(var symbol in symbols.Take(MaxSymbolsToReturn))
             {
@@ -72,11 +69,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 foreach (var location in s.Locations)
                 {
                     QuickFix converted = ConvertSymbol(symbol, location);
-                    if (!uniqueSymbols.Contains(converted))
-                    {
-                        uniqueSymbols.Add(converted);
-                        symbolLocations.Add(converted);
-                    }
+                    symbolLocations.Add(converted);
                 }
             }
 
@@ -85,7 +78,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             symbolLocations.AddRange(locationsFromCodeSearch.Where(locationFromCodeSearch => !filesKnownToRoslyn.Contains(locationFromCodeSearch.FileName)));
 
             _logger.LogDebug($"Found {symbolLocations.Count} symbol(s) in total");
-            return new QuickFixResponse(symbolLocations);
+            return new QuickFixResponse(symbolLocations.Distinct());
         }
 
         private QuickFix ConvertSymbol(ISymbol symbol, Location location)

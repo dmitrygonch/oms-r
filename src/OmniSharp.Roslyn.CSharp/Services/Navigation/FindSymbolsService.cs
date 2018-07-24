@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions;
 using OmniSharp.Mef;
 using OmniSharp.Models;
@@ -18,13 +19,15 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
     {
         private const int MaxSymbolsToReturn = 100;
         private static readonly TimeSpan QueryCodeSearchTimeout = TimeSpan.FromSeconds(5);
+        private readonly ILogger _logger;
 
         private OmniSharpWorkspace _workspace;
 
         [ImportingConstructor]
-        public FindSymbolsService(OmniSharpWorkspace workspace)
+        public FindSymbolsService(OmniSharpWorkspace workspace, ILoggerFactory loggerFactory)
         {
             _workspace = workspace;
+            _logger = loggerFactory.CreateLogger<FindSymbolsService>();
         }
 
         public async Task<QuickFixResponse> Handle(FindSymbolsRequest request = null)
@@ -42,7 +45,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             Task<List<QuickFix>> queryCodeSearchTask = Task.FromResult(new List<QuickFix>());
             if (HackOptions.Enabled)
             {
-                queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 10, QueryCodeSearchTimeout);
+                queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 40, QueryCodeSearchTimeout);
             }
 
             return await FindSymbols(isMatch, queryCodeSearchTask);
@@ -50,7 +53,11 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
         private async Task<QuickFixResponse> FindSymbols(Func<string, bool> predicate, Task<List<QuickFix>> queryCodeSearchTask)
         {
-            var symbols = await SymbolFinder.FindSourceDeclarationsAsync(_workspace.CurrentSolution, predicate, SymbolFilter.TypeAndMember);
+            // Get symbols from Roslyn first and store the list preserving the order
+            IEnumerable<ISymbol> symbols = await SymbolFinder.FindSourceDeclarationsAsync(_workspace.CurrentSolution, predicate, SymbolFilter.TypeAndMember);
+
+            // Hash symbols from Roslyn to use to avoid dupes
+            HashSet<QuickFix> uniqueSymbols = new HashSet<QuickFix>(QuickFixEqualityComparer.Instance);
 
             var symbolLocations = new List<QuickFix>();
             foreach(var symbol in symbols.Take(MaxSymbolsToReturn))
@@ -64,13 +71,21 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
                 foreach (var location in s.Locations)
                 {
-                    symbolLocations.Add(ConvertSymbol(symbol, location));
+                    QuickFix converted = ConvertSymbol(symbol, location);
+                    if (!uniqueSymbols.Contains(converted))
+                    {
+                        uniqueSymbols.Add(converted);
+                        symbolLocations.Add(converted);
+                    }
                 }
             }
 
-            symbolLocations.AddRange(await queryCodeSearchTask);
+            HashSet<string> filesKnownToRoslyn = new HashSet<string>(symbolLocations.Select(l => l.FileName), StringComparer.OrdinalIgnoreCase);
+            List<QuickFix> locationsFromCodeSearch = await queryCodeSearchTask;
+            symbolLocations.AddRange(locationsFromCodeSearch.Where(locationFromCodeSearch => !filesKnownToRoslyn.Contains(locationFromCodeSearch.FileName)));
 
-            return new QuickFixResponse(symbolLocations.Distinct());
+            _logger.LogDebug($"Found {symbolLocations.Count} symbol(s) in total");
+            return new QuickFixResponse(symbolLocations);
         }
 
         private QuickFix ConvertSymbol(ISymbol symbol, Location location)

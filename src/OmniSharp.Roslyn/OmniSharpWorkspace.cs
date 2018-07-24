@@ -25,6 +25,12 @@ using OmniSharp.Utilities;
 
 namespace OmniSharp
 {
+    public enum CodeSearchQueryType
+    {
+        FindDefinitions = 1,
+        FindReferences = 2,
+    };
+
     [Export, Shared]
     public class OmniSharpWorkspace : Workspace
     {
@@ -128,21 +134,34 @@ namespace OmniSharp
             GetSearchClientAsync().FireAndForget(_logger);
         }
 
-        public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration)
+        public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration, bool wildCardSearch, CodeSearchQueryType searchType)
         {
             List<QuickFix> result = null;
+            string searchTypeString;
+            switch(searchType)
+            {
+                case CodeSearchQueryType.FindDefinitions:
+                    searchTypeString = $"def:{filter}";
+                    break;
+                case CodeSearchQueryType.FindReferences:
+                    searchTypeString = $"ref:{filter}";
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown search type {searchType}");
+            }
+
+            CodeSearchRequest request = new CodeSearchRequest
+            {
+                SearchText = $"{searchTypeString}{(wildCardSearch ? "*" : string.Empty)}",
+                Skip = 0,
+                Top = maxResults,
+                Filters = _searchFilters,
+                IncludeFacets = false
+            };
+
             try
             {
-                CodeSearchRequest request = new CodeSearchRequest
-                {
-                    SearchText = $"def:{filter}*",
-                    Skip = 0,
-                    Top = maxResults,
-                    Filters = _searchFilters,
-                    IncludeFacets = false
-                };
-
-                _logger.LogDebug($"Querying VSTS Code Search with filter '{filter}'");
+                _logger.LogDebug($"Querying VSTS Code Search with filter '{request.SearchText}'");
                 SearchHttpClient client = await GetSearchClientAsync();
                 if (client == null)
                 {
@@ -153,23 +172,23 @@ namespace OmniSharp
                 {
                     Stopwatch sw = Stopwatch.StartNew();
                     CodeSearchResponse response = await client.FetchAdvancedCodeSearchResultsAsync(request, ct);
-                    _logger.LogDebug($"Response from VSTS Code Search for filter '{filter}' completed in {sw.Elapsed.TotalSeconds} seconds and contains {response.Results.Count()} results");
+                    _logger.LogDebug($"Response from VSTS Code Search for filter '{request.SearchText}' completed in {sw.Elapsed.TotalSeconds} seconds and contains {response.Results.Count()} result(s)");
 
                     if (response != null)
                     {
-                        result = await GetQuickFixesFromCodeResults(response.Results);
+                        result = await GetQuickFixesFromCodeResults(response.Results, searchType, filter);
                     }
                 }
             }
             catch (Exception e)
             {
-                _logger.LogError(e, $"Failed to query VSTS Code Search for filter '{filter}'");
+                _logger.LogError(e, $"Failed to query VSTS Code Search for filter '{request.SearchText}'");
             }
 
             return result ?? new List<QuickFix>();
         }
 
-        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults)
+        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults, CodeSearchQueryType searchType, string searchFilter)
         {
             var transform = new TransformBlock<CodeResult, List<QuickFix>>(codeResult =>
             {
@@ -180,11 +199,11 @@ namespace OmniSharp
                     return null;
                 }
 
-                return GetQuickFixeFromCodeResult(codeResult, filePath);
+                return GetQuickFixeFromCodeResult(codeResult, filePath, searchType, searchFilter);
             },
             new ExecutionDataflowBlockOptions
             {
-                MaxDegreeOfParallelism = System.Environment.ProcessorCount - 1,
+                MaxDegreeOfParallelism = Environment.ProcessorCount - 1,
                 BoundedCapacity = DataflowBlockOptions.Unbounded
             });
 
@@ -211,7 +230,7 @@ namespace OmniSharp
             return allFoundSymbols;
         }
 
-        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath)
+        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType, string searchFilter)
         {
             var foundSymbols = new List<QuickFix>();
             if (codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHits))
@@ -234,7 +253,22 @@ namespace OmniSharp
                                 EndColumn = hit.CharOffset - lineOffset + hit.Length,
                                 Projects = new List<string>()
                             };
-                            symbolLocation.Text = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
+
+                            string symbolText = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
+                            if (searchType == CodeSearchQueryType.FindReferences)
+                            {
+                                if (!symbolText.Equals(searchFilter, StringComparison.Ordinal))
+                                {
+                                    // VSTS Code Search is case-insensitive. Require complete case match when looking for references
+                                    continue;
+                                }
+
+                                symbolLocation.Text = line.Trim();
+                            }
+                            else
+                            {
+                                symbolLocation.Text = symbolText;
+                            }
                             foundSymbols.Add(symbolLocation);
                         }
                     }
@@ -270,15 +304,15 @@ namespace OmniSharp
             {
                 try
                 {
-                    _logger.LogDebug($"Creating Search Client for {_repoUriString}");
+                    _logger.LogDebug($"Creating VSTS Code Search Client for {_repoUriString}");
                     Uri uri = new Uri(_repoUriString);
                     var connection = new VssConnection(uri, new VssClientCredentials());
                     searchClient = await connection.GetClientAsync<SearchHttpClient>();
-                    _logger.LogDebug($"Successfully created Search Client for {_repoUriString}");
+                    _logger.LogDebug($"Successfully created VSTS Code Search Client for {_repoUriString}");
                 }
                 catch (Exception e)
                 {
-                    _logger.LogError(e, $"Failed to create Search Client for {_repoUriString}");
+                    _logger.LogError(e, $"Failed to create VSTS Code Search Client for {_repoUriString}");
                 }
             }
 

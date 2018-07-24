@@ -45,7 +45,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             Task<List<QuickFix>> queryCodeSearchTask = Task.FromResult(new List<QuickFix>());
             if (HackOptions.Enabled)
             {
-                queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 40, QueryCodeSearchTimeout);
+                queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 50, QueryCodeSearchTimeout, true, CodeSearchQueryType.FindDefinitions);
             }
 
             return await FindSymbols(isMatch, queryCodeSearchTask);
@@ -77,7 +77,6 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             List<QuickFix> locationsFromCodeSearch = await queryCodeSearchTask;
             symbolLocations.AddRange(locationsFromCodeSearch.Where(locationFromCodeSearch => !filesKnownToRoslyn.Contains(locationFromCodeSearch.FileName)));
 
-            _logger.LogDebug($"Found {symbolLocations.Count} symbol(s) in total");
             return new QuickFixResponse(symbolLocations.Distinct());
         }
 

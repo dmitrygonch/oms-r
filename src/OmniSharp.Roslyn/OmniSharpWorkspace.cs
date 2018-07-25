@@ -144,7 +144,7 @@ namespace OmniSharp
                     searchTypeString = $"def:{filter}";
                     break;
                 case CodeSearchQueryType.FindReferences:
-                    searchTypeString = $"ref:{filter}";
+                    searchTypeString = $"{filter}"; // Don't use 'ref:' because this removes for example 'new SomeClass' references from the result
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown search type {searchType}");
@@ -152,7 +152,7 @@ namespace OmniSharp
 
             CodeSearchRequest request = new CodeSearchRequest
             {
-                SearchText = $"{searchTypeString}{(wildCardSearch ? "*" : string.Empty)}",
+                SearchText = $"ext:cs {searchTypeString}{(wildCardSearch ? "*" : string.Empty)}",
                 Skip = 0,
                 Top = maxResults,
                 Filters = _searchFilters,
@@ -263,10 +263,22 @@ namespace OmniSharp
                                     continue;
                                 }
 
+                                if (line.Trim().Substring(0, 2) == @"//")
+                                {
+                                    // Since 'ref:' at the moment isn't being used when querying for refs, at least ignore obvious mismatches like comments
+                                    continue;
+                                }
+
                                 symbolLocation.Text = line.Trim();
                             }
                             else
                             {
+                                if (symbolText.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                                {
+                                    // detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits
+                                    continue;
+                                }
+
                                 symbolLocation.Text = symbolText;
                             }
                             foundSymbols.Add(symbolLocation);

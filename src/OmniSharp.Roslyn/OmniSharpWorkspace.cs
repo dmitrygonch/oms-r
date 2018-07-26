@@ -176,7 +176,7 @@ namespace OmniSharp
 
                     if (response != null)
                     {
-                        result = await GetQuickFixesFromCodeResults(response.Results, searchType, filter);
+                        result = await GetQuickFixesFromCodeResults(response.Results, searchType, filter, wildCardSearch);
                     }
                 }
             }
@@ -188,7 +188,8 @@ namespace OmniSharp
             return result ?? new List<QuickFix>();
         }
 
-        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults, CodeSearchQueryType searchType, string searchFilter)
+        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults,
+            CodeSearchQueryType searchType, string searchFilter, bool wildCardSearch)
         {
             var transform = new TransformBlock<CodeResult, List<QuickFix>>(codeResult =>
             {
@@ -199,7 +200,7 @@ namespace OmniSharp
                     return null;
                 }
 
-                return GetQuickFixeFromCodeResult(codeResult, filePath, searchType, searchFilter);
+                return GetQuickFixeFromCodeResult(codeResult, filePath, searchType, searchFilter, wildCardSearch);
             },
             new ExecutionDataflowBlockOptions
             {
@@ -230,7 +231,8 @@ namespace OmniSharp
             return allFoundSymbols;
         }
 
-        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType, string searchFilter)
+        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType,
+            string searchFilter, bool wildCardSearch)
         {
             var foundSymbols = new List<QuickFix>();
             if (codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHits))
@@ -263,7 +265,7 @@ namespace OmniSharp
                                     continue;
                                 }
 
-                                if (line.Trim().Substring(0, 2) == @"//")
+                                if (line.Trim().Length >= 2 && line.Trim().Substring(0, 2) == @"//")
                                 {
                                     // Since 'ref:' at the moment isn't being used when querying for refs, at least ignore obvious mismatches like comments
                                     continue;
@@ -273,9 +275,10 @@ namespace OmniSharp
                             }
                             else
                             {
-                                if (symbolText.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) < 0)
+                                if (symbolText.IndexOf(searchFilter, wildCardSearch ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) < 0)
                                 {
-                                    // detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits
+                                    // detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits.
+                                    // for non-wildCardSearch only return exact results since this is what expected by the callers
                                     continue;
                                 }
 

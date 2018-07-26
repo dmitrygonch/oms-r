@@ -13,6 +13,7 @@ using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.GotoDefinition;
 using OmniSharp.Models.Metadata;
+using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
@@ -40,12 +41,13 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
             var response = new GotoDefinitionResponse();
 
-            if (document == null)
+            if (HackOptions.Enabled && document == null)
             {
                 _logger.LogDebug($"Couldn't get document for {request.FileName}");
-                return await GetDefinitionResponse(request);
+                return await GetDefinitionFromCodeSearch(request);
             }
-            else
+
+            if (document != null)
             {
                 var semanticModel = await document.GetSemanticModelAsync();
                 var syntaxTree = semanticModel.SyntaxTree;
@@ -53,14 +55,14 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 var position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
                 var symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
 
-                if (symbol == null)
+                if (HackOptions.Enabled && symbol == null)
                 {
                     _logger.LogDebug($"Couldn't get symbol [line {request.Line},column {request.Column}] for {request.FileName}");
-                    return await GetDefinitionResponse(request);
+                    return await GetDefinitionFromCodeSearch(request);
                 }
 
                 // go to definition for namespaces is not supported
-                if (!(symbol is INamespaceSymbol))
+                if (symbol == null && !(symbol is INamespaceSymbol))
                 {
                     // for partial methods, pick the one with body
                     if (symbol is IMethodSymbol method)
@@ -113,7 +115,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             return response;
         }
 
-        private async Task<GotoDefinitionResponse> GetDefinitionResponse(GotoDefinitionRequest request)
+        private async Task<GotoDefinitionResponse> GetDefinitionFromCodeSearch(GotoDefinitionRequest request)
         {
             var response = new GotoDefinitionResponse();
             if (!TryGetSymbolTextForRequest(request, out string symbolText))

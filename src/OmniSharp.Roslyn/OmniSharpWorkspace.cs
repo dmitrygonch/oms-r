@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
@@ -38,9 +39,7 @@ namespace OmniSharp
 
         // HACK data
         private string _repoRoot;
-        private string _repoUriString;
-        private string _repoName;
-        private string _projectName;
+        private Uri _repoUri;
         private IDictionary<string, IEnumerable<string>> _searchFilters;
 
         public bool Initialized { get; set; }
@@ -115,23 +114,100 @@ namespace OmniSharp
             _logger.LogWarning($"Couldn't find any C# projects for {filePath}");
         }
 
-        public void InitCodeSearch()
+        public void InitCodeSearch(string targetDirectory)
         {
             // Fill in HACK data
-            _projectName = Environment.GetEnvironmentVariable("HACK_PROJECT_NAME");
-            _repoName = Environment.GetEnvironmentVariable("HACK_REPO_NAME");
-            _repoRoot = Environment.GetEnvironmentVariable("HACK_REPO_ROOT");
-            _repoUriString = Environment.GetEnvironmentVariable("HACK_REPO_URI");
-
-            _searchFilters = new Dictionary<string, IEnumerable<string>>
+            _repoRoot = GetRepoRootOrNull(targetDirectory);
+            if (_repoRoot != null)
             {
-                ["Project"] = new[] { _projectName },
-                ["Repository"] = new[] { _repoName },
-                ["Path"] = new[] { "" },
-                ["Branch"] = new[] { "master" },
-            };
+                _searchFilters = GetRepoSearchFilters(_repoRoot, out _repoUri);
+            }
 
             GetSearchClientAsync().FireAndForget(_logger);
+        }
+
+        private static readonly Regex CloneUriRegex =
+            new Regex(
+                @"(?ix)
+                  https://(?<vsoaccount>.+)\.(?<vsodomain>visualstudio\.com)
+                    /(?<collection>[^/]+)
+                    /((?<project>.+(?<!/_git))
+                    /)?_git
+                    /(?<repo>[^/]+)
+                    /?",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+
+        private static string GetRepoRootOrNull(string targetDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(targetDirectory) || !Directory.Exists(targetDirectory))
+            {
+                return null;
+            }
+
+            string repoRoot = targetDirectory;
+            while (repoRoot != null && !Directory.Exists(Path.Combine(repoRoot, ".git")))
+            {
+                repoRoot = Path.GetDirectoryName(repoRoot);
+            }
+
+            return repoRoot;
+        }
+
+        private IDictionary<string, IEnumerable<string>> GetRepoSearchFilters(string repoRoot, out Uri vstsAccountUri)
+        {
+            var searchFilters = new Dictionary<string, IEnumerable<string>>();
+            vstsAccountUri = null;
+            try
+            {
+                string vstsUri = ProcessHelper.RunAndCaptureOutput("git.exe", "config --get remote.origin.url", repoRoot);
+                if ((!string.IsNullOrEmpty(vstsUri)) && ParseVstsRepoUrl(
+                    vstsUri,
+                    out vstsAccountUri,
+                    out string vstsProjectName,
+                    out string vstsRepoName))
+                {
+                    searchFilters.Add("Project", new[] { vstsProjectName });
+                    searchFilters.Add("Repository", new[] { vstsRepoName });
+                    searchFilters.Add("Branch", new[] { "master" });
+                    searchFilters.Add("Path", new[] { "" });
+                    _logger.LogDebug($"Initialized VSTS Code Search filters for {vstsAccountUri.AbsoluteUri}, project {vstsProjectName}, repo {vstsRepoName}");
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, $"Failed initialize VSTS Code Search with filters for repo '{repoRoot}'");
+            }
+
+            return searchFilters;
+        }
+
+        public static bool ParseVstsRepoUrl(
+            string vstsUri,
+            out Uri vstsAccountUri,
+            out string vstsProjectName,
+            out string vstsRepoName)
+        {
+            vstsAccountUri = null;
+            vstsProjectName = null;
+            vstsRepoName = null;
+
+            Match match = CloneUriRegex.Match(vstsUri);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            string vsoAccount = match.Groups["vsoaccount"].Captures[0].Value;
+            string vsoDomain = match.Groups["vsodomain"].Captures[0].Value;
+            vstsRepoName = match.Groups["repo"].Captures[0].Value;
+            string projectName = match.Groups["project"].Captures.Count > 0
+                ? match.Groups["project"].Captures[0].Value
+                : (match.Groups["collection"].Captures.Count > 0 ? match.Groups["collection"].Captures[0].Value : vstsRepoName);
+
+            vstsAccountUri = new Uri($"https://{vsoAccount}.{vsoDomain}");
+            vstsProjectName = projectName;
+            return true;
         }
 
         public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration, bool wildCardSearch, CodeSearchQueryType searchType)
@@ -314,20 +390,24 @@ namespace OmniSharp
 
         private async Task<SearchHttpClient> GetSearchClientAsync()
         {
+            if (_repoRoot == null || _repoUri == null)
+            {
+                return null;
+            }
+
             SearchHttpClient searchClient = null;
             if (_searchClient == null)
             {
                 try
                 {
-                    _logger.LogDebug($"Creating VSTS Code Search Client for {_repoUriString}");
-                    Uri uri = new Uri(_repoUriString);
-                    var connection = new VssConnection(uri, new VssClientCredentials());
+                    _logger.LogDebug($"Creating VSTS Code Search Client for {_repoUri.AbsoluteUri}");
+                    var connection = new VssConnection(_repoUri, new VssClientCredentials());
                     searchClient = await connection.GetClientAsync<SearchHttpClient>();
-                    _logger.LogDebug($"Successfully created VSTS Code Search Client for {_repoUriString}");
+                    _logger.LogDebug($"Successfully created VSTS Code Search Client for {_repoUri.AbsoluteUri}");
                 }
                 catch (Exception e)
                 {
-                    _logger.LogError(e, $"Failed to create VSTS Code Search Client for {_repoUriString}");
+                    _logger.LogError(e, $"Failed to create VSTS Code Search Client for {_repoUri.AbsoluteUri}");
                 }
             }
 

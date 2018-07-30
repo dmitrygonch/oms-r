@@ -113,7 +113,16 @@ namespace OmniSharp.MSBuild
         {
             if (HackOptions.Enabled)
             {
-                _workspace.InitCodeSearch();
+                string targetDir = _environment.TargetDirectory;
+                if (targetDir == null)
+                {
+                    if (_environment.SolutionFilePath != null && File.Exists(_environment.SolutionFilePath))
+                    {
+                        targetDir = Path.GetDirectoryName(_environment.SolutionFilePath);
+                    }
+                }
+
+                _workspace.InitCodeSearch(targetDir);
 
                 _logger.LogDebug($"Skipped looking for initial projects to load");
                 return Array.Empty<string>();

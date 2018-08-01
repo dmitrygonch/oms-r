@@ -53,7 +53,7 @@ namespace OmniSharp.MSBuild.Discovery.Providers
                         continue;
                     }
 
-                    if (state == InstanceState.Complete &&
+                    if (state != InstanceState.None &&
                        instance.GetPackages().Any(package => package.GetId() == "Microsoft.VisualStudio.Component.Roslyn.Compiler"))
                     {
                         // Note: The code below will likely fail if MSBuild's version increments.

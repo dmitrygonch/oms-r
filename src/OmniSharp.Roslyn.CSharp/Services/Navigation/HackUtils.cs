@@ -1,4 +1,5 @@
 ﻿using OmniSharp.Models;
+using OmniSharp.Options;
 using System;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,11 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
         public static bool TryGetSymbolTextForRequest(Request request, out string symbolText)
         {
             symbolText = null;
+            if (!HackOptions.Enabled)
+            {
+                return false;
+            }
+
             string line = File.ReadAllLines(request.FileName).Skip(request.Line).Take(1).FirstOrDefault();
 
             if (line == null)

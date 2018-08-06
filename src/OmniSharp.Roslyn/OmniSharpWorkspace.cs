@@ -276,7 +276,7 @@ namespace OmniSharp
                     return null;
                 }
 
-                return GetQuickFixeFromCodeResult(codeResult, filePath, searchType, searchFilter, wildCardSearch);
+                return GetQuickFixesFromCodeResult(codeResult, filePath, searchType, searchFilter, wildCardSearch);
             },
             new ExecutionDataflowBlockOptions
             {
@@ -307,85 +307,101 @@ namespace OmniSharp
             return allFoundSymbols;
         }
 
-        private List<QuickFix> GetQuickFixeFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType,
+        private static List<QuickFix> GetQuickFixesFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType,
             string searchFilter, bool wildCardSearch)
         {
             var foundSymbols = new List<QuickFix>();
-            if (codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHits))
+            if (!codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHitsEnum))
             {
-                int lineOffset = 0;
-                int lineNumber = 0;
-                foreach (string line in File.ReadLines(filePath))
+                return foundSymbols;
+            }
+
+            List<Hit> contentHits = contentHitsEnum.ToList();
+            int lineOffsetWin = 0;
+            int lineOffsetUnix = 0;
+            int lineNumber = 0;
+
+            foreach (string line in File.ReadLines(filePath))
+            {
+                foreach (Hit hit in contentHits.OrderBy(h => h.CharOffset))
                 {
-                    foreach (Hit hit in contentHits.OrderBy(h => h.CharOffset))
+                    // Hit.CharOffset is calculated based on end-of-lines of the file stored by the service which can be different from local file end-of-lines. 
+                    // Try guess what end-of-lines were used by the service and use the first match.
+                    if (hit.CharOffset >= lineOffsetUnix && hit.CharOffset < lineOffsetUnix + line.Length)
                     {
-                        if (hit.CharOffset >= lineOffset && hit.CharOffset < lineOffset + line.Length)
+                        if (ConsiderMatchCandidate(filePath, searchType, searchFilter, wildCardSearch, hit, lineNumber, lineOffsetUnix, line, foundSymbols))
                         {
-                            var symbolLocation = new SymbolLocation
-                            {
-                                Kind = SymbolKinds.Unknown,
-                                FileName = filePath,
-                                Line = lineNumber,
-                                EndLine = lineNumber,
-                                Column = hit.CharOffset - lineOffset,
-                                EndColumn = hit.CharOffset - lineOffset + hit.Length,
-                                Projects = new List<string>()
-                            };
-
-                            string symbolText = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
-                            if (searchType == CodeSearchQueryType.FindReferences)
-                            {
-                                if (!symbolText.Equals(searchFilter, StringComparison.Ordinal))
-                                {
-                                    // VSTS Code Search is case-insensitive. Require complete case match when looking for references
-                                    continue;
-                                }
-
-                                if (line.Trim().Length >= 2 && line.Trim().Substring(0, 2) == @"//")
-                                {
-                                    // Since 'ref:' at the moment isn't being used when querying for refs, at least ignore obvious mismatches like comments
-                                    continue;
-                                }
-
-                                symbolLocation.Text = line.Trim();
-                            }
-                            else
-                            {
-                                if (symbolText.IndexOf(searchFilter, wildCardSearch ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) < 0)
-                                {
-                                    // detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits.
-                                    // for non-wildCardSearch only return exact results since this is what expected by the callers
-                                    continue;
-                                }
-
-                                symbolLocation.Text = symbolText;
-                            }
-                            foundSymbols.Add(symbolLocation);
+                            // Keep only a single match per line per hit - it is already clone enough
+                            continue;
                         }
                     }
 
-                    lineOffset += line.Length + Environment.NewLine.Length;
-                    lineNumber++;
+                    if (hit.CharOffset >= lineOffsetWin && hit.CharOffset < lineOffsetWin + line.Length)
+                    {
+                        ConsiderMatchCandidate(filePath, searchType, searchFilter, wildCardSearch, hit, lineNumber, lineOffsetWin, line, foundSymbols);
+                    }
                 }
+
+                if (foundSymbols.Count >= contentHits.Count)
+                {
+                    // Found matching symbols for all hits - can stop searching the file
+                    break;
+                }
+
+                lineOffsetWin += line.Length + 2;
+                lineOffsetUnix += line.Length + 1;
+                lineNumber++;
+            }
+
+            return foundSymbols;
+        }
+
+        private static bool ConsiderMatchCandidate(string filePath, CodeSearchQueryType searchType, string searchFilter, bool wildCardSearch, Hit hit,
+            int lineNumber, int lineOffset, string line, List<QuickFix> foundSymbols)
+        {
+            if (line.Trim().Length >= 2 && line.Trim().Substring(0, 2) == @"//")
+            {
+                // ignore obvious mismatches like comments
+                return false;
+            }
+
+            var symbolLocation = new SymbolLocation
+            {
+                Kind = SymbolKinds.Unknown,
+                FileName = filePath,
+                Line = lineNumber,
+                EndLine = lineNumber,
+                Column = hit.CharOffset - lineOffset,
+                EndColumn = hit.CharOffset - lineOffset + hit.Length,
+                Projects = new List<string>()
+            };
+
+            string symbolText = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
+
+            // VSTS Code Search is case-insensitive. Require complete case match when looking for references or the definition
+            if (!wildCardSearch && !symbolText.Equals(searchFilter, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // Detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits.
+            // Or the case when the end of lines are different b/w what was used when calculating hit offset of the server vs end of lines in the local file
+            if (wildCardSearch && symbolText.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) != 0)
+            {
+                return false;
+            }
+
+            if (searchType == CodeSearchQueryType.FindReferences)
+            {
+                symbolLocation.Text = line.Trim();
             }
             else
             {
-                var symbolLocation = new SymbolLocation()
-                {
-                    Kind = SymbolKinds.Unknown,
-                    Text = Path.GetFileNameWithoutExtension(codeResult.Filename),
-                    FileName = filePath,
-                    Line = 0,
-                    Column = 0,
-                    EndLine = 0,
-                    EndColumn = 0,
-                    Projects = new List<string>()
-
-                };
-                foundSymbols.Add(symbolLocation);
-                _logger.LogDebug($"No content matches found for {filePath}");
+                symbolLocation.Text = symbolText;
             }
-            return foundSymbols;
+
+            foundSymbols.Add(symbolLocation);
+            return true;
         }
 
         private async Task<SearchHttpClient> GetSearchClientAsync()

@@ -1,16 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Composition;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.GotoDefinition;
 using OmniSharp.Models.Metadata;
+using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
@@ -19,12 +22,14 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
     {
         private readonly MetadataHelper _metadataHelper;
         private readonly OmniSharpWorkspace _workspace;
+        private readonly ILogger _logger;
 
         [ImportingConstructor]
-        public GotoDefinitionService(OmniSharpWorkspace workspace, MetadataHelper metadataHelper)
+        public GotoDefinitionService(OmniSharpWorkspace workspace, MetadataHelper metadataHelper, ILoggerFactory loggerFactory)
         {
             _workspace = workspace;
             _metadataHelper = metadataHelper;
+            _logger = loggerFactory.CreateLogger<GotoDefinitionService>();
         }
 
         public async Task<GotoDefinitionResponse> Handle(GotoDefinitionRequest request)
@@ -36,6 +41,12 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
             var response = new GotoDefinitionResponse();
 
+            if (HackOptions.Enabled && document == null)
+            {
+                _logger.LogDebug($"Couldn't get document for {request.FileName}");
+                return await GetDefinitionFromCodeSearch(request);
+            }
+
             if (document != null)
             {
                 var semanticModel = await document.GetSemanticModelAsync();
@@ -43,6 +54,12 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 var sourceText = await document.GetTextAsync();
                 var position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
                 var symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
+
+                if (HackOptions.Enabled && symbol == null)
+                {
+                    _logger.LogDebug($"Couldn't get symbol [line {request.Line},column {request.Column}] for {request.FileName}");
+                    return await GetDefinitionFromCodeSearch(request);
+                }
 
                 // go to definition for namespaces is not supported
                 if (symbol != null && !(symbol is INamespaceSymbol))
@@ -95,7 +112,24 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                     }
                 }
             }
+            return response;
+        }
 
+        private async Task<GotoDefinitionResponse> GetDefinitionFromCodeSearch(GotoDefinitionRequest request)
+        {
+            var response = new GotoDefinitionResponse();
+            if (!HackUtils.TryGetSymbolTextForRequest(request, out string symbolText))
+            {
+                return response;
+            }
+
+            List<QuickFix> hits = await _workspace.QueryCodeSearch(symbolText, 1, TimeSpan.FromSeconds(5), false, CodeSearchQueryType.FindDefinitions);
+            if (hits.Count != 0)
+            {
+                response.FileName = hits[0].FileName;
+                response.Column = hits[0].Column;
+                response.Line = hits[0].Line;
+            }
             return response;
         }
     }

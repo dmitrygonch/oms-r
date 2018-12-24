@@ -2,24 +2,46 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Composition;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
 using OmniSharp.FileWatching;
+using Microsoft.VisualStudio.Services.Client;
+using Microsoft.VisualStudio.Services.Search.Shared.WebApi.Contracts;
+using Microsoft.VisualStudio.Services.Search.WebApi;
+using Microsoft.VisualStudio.Services.Search.WebApi.Contracts.Code;
+using Microsoft.VisualStudio.Services.WebApi;
+using OmniSharp.Models;
+using OmniSharp.Models.V2;
+using OmniSharp.Options;
 using OmniSharp.Roslyn;
 using OmniSharp.Roslyn.Utilities;
 using OmniSharp.Utilities;
 
 namespace OmniSharp
 {
+    public enum CodeSearchQueryType
+    {
+        FindDefinitions = 1,
+        FindReferences = 2,
+    };
+
     [Export, Shared]
     public class OmniSharpWorkspace : Workspace
     {
+        // HACK data
+        private string _repoRoot;
+        private Uri _repoUri;
+        private IDictionary<string, IEnumerable<string>> _searchFilters;
+
         public bool Initialized { get; set; }
         public BufferManager BufferManager { get; private set; }
 
@@ -29,12 +51,340 @@ namespace OmniSharp
 
         private readonly ConcurrentDictionary<string, ProjectInfo> miscDocumentsProjectInfos = new ConcurrentDictionary<string, ProjectInfo>();
 
+        private object _searchClientLock = new object();
+        
+        private SearchHttpClient _searchClient;
+
         [ImportingConstructor]
         public OmniSharpWorkspace(HostServicesAggregator aggregator, ILoggerFactory loggerFactory, IFileSystemWatcher fileSystemWatcher)
             : base(aggregator.CreateHostServices(), "Custom")
         {
             BufferManager = new BufferManager(this, fileSystemWatcher);
             _logger = loggerFactory.CreateLogger<OmniSharpWorkspace>();
+        }
+
+        public void InitCodeSearch(string targetDirectory)
+        {
+            // Fill in HACK data
+            _repoRoot = GetRepoRootOrNull(targetDirectory);
+            if (_repoRoot != null)
+            {
+                _searchFilters = GetRepoSearchFilters(_repoRoot, out _repoUri);
+            }
+
+            GetSearchClientAsync().FireAndForget(_logger);
+        }
+
+        private static readonly Regex CloneUriRegex =
+            new Regex(
+                @"(?ix)
+                  https://(?<vsoaccount>.+)\.(?<vsodomain>visualstudio\.com)
+                    /(?<collection>[^/]+)
+                    /((?<project>.+(?<!/_git))
+                    /)?_git
+                    /(?<repo>[^/]+)
+                    /?",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+
+        private static string GetRepoRootOrNull(string targetDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(targetDirectory) || !Directory.Exists(targetDirectory))
+            {
+                return null;
+            }
+
+            string repoRoot = targetDirectory;
+            while (repoRoot != null && !Directory.Exists(Path.Combine(repoRoot, ".git")))
+            {
+                repoRoot = Path.GetDirectoryName(repoRoot);
+            }
+
+            return repoRoot;
+        }
+
+        private IDictionary<string, IEnumerable<string>> GetRepoSearchFilters(string repoRoot, out Uri vstsAccountUri)
+        {
+            var searchFilters = new Dictionary<string, IEnumerable<string>>();
+            vstsAccountUri = null;
+            try
+            {
+                string vstsUri = ProcessHelper.RunAndCaptureOutput("git.exe", "config --get remote.origin.url", repoRoot);
+                if ((!string.IsNullOrEmpty(vstsUri)) && ParseVstsRepoUrl(
+                    vstsUri,
+                    out vstsAccountUri,
+                    out string vstsProjectName,
+                    out string vstsRepoName))
+                {
+                    searchFilters.Add("Project", new[] { vstsProjectName });
+                    searchFilters.Add("Repository", new[] { vstsRepoName });
+                    searchFilters.Add("Branch", new[] { "master" });
+                    searchFilters.Add("Path", new[] { "" });
+                    _logger.LogDebug($"Initialized VSTS Code Search filters for {vstsAccountUri.AbsoluteUri}, project {vstsProjectName}, repo {vstsRepoName}");
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, $"Failed initialize VSTS Code Search with filters for repo '{repoRoot}'");
+            }
+
+            return searchFilters;
+        }
+
+        public static bool ParseVstsRepoUrl(
+            string vstsUri,
+            out Uri vstsAccountUri,
+            out string vstsProjectName,
+            out string vstsRepoName)
+        {
+            vstsAccountUri = null;
+            vstsProjectName = null;
+            vstsRepoName = null;
+
+            Match match = CloneUriRegex.Match(vstsUri);
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            string vsoAccount = match.Groups["vsoaccount"].Captures[0].Value;
+            string vsoDomain = match.Groups["vsodomain"].Captures[0].Value;
+            vstsRepoName = match.Groups["repo"].Captures[0].Value;
+            string projectName = match.Groups["project"].Captures.Count > 0
+                ? match.Groups["project"].Captures[0].Value
+                : (match.Groups["collection"].Captures.Count > 0 ? match.Groups["collection"].Captures[0].Value : vstsRepoName);
+
+            vstsAccountUri = new Uri($"https://{vsoAccount}.{vsoDomain}");
+            vstsProjectName = projectName;
+            return true;
+        }
+
+        public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration, bool wildCardSearch, CodeSearchQueryType searchType)
+        {
+            List<QuickFix> result = null;
+            string searchTypeString;
+            switch(searchType)
+            {
+                case CodeSearchQueryType.FindDefinitions:
+                    searchTypeString = $"def:{filter}";
+                    break;
+                case CodeSearchQueryType.FindReferences:
+                    searchTypeString = $"{filter}"; // Don't use 'ref:' because this removes for example 'new SomeClass' references from the result
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown search type {searchType}");
+            }
+
+            CodeSearchRequest request = new CodeSearchRequest
+            {
+                SearchText = $"ext:cs {searchTypeString}{(wildCardSearch ? "*" : string.Empty)}",
+                Skip = 0,
+                Top = maxResults,
+                Filters = _searchFilters,
+                IncludeFacets = false
+            };
+
+            try
+            {
+                _logger.LogDebug($"Querying VSTS Code Search with filter '{request.SearchText}'");
+                SearchHttpClient client = await GetSearchClientAsync();
+                if (client == null)
+                {
+                    return new List<QuickFix>();
+                }
+
+                using (var ct = new CancellationTokenSource(maxDuration))
+                {
+                    Stopwatch sw = Stopwatch.StartNew();
+                    CodeSearchResponse response = await client.FetchAdvancedCodeSearchResultsAsync(request, ct);
+                    _logger.LogDebug($"Response from VSTS Code Search for filter '{request.SearchText}' completed in {sw.Elapsed.TotalSeconds} seconds and contains {response.Results.Count()} result(s)");
+
+                    if (response != null)
+                    {
+                        result = await GetQuickFixesFromCodeResults(response.Results, searchType, filter, wildCardSearch);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, $"Failed to query VSTS Code Search for filter '{request.SearchText}'");
+            }
+
+            return result ?? new List<QuickFix>();
+        }
+
+        private async Task<List<QuickFix>> GetQuickFixesFromCodeResults(IEnumerable<CodeResult> codeResults,
+            CodeSearchQueryType searchType, string searchFilter, bool wildCardSearch)
+        {
+            var transform = new TransformBlock<CodeResult, List<QuickFix>>(codeResult =>
+            {
+                string filePath = Path.Combine(_repoRoot, codeResult.Path.TrimStart('/').Replace('/', '\\'));
+                if (!File.Exists(filePath))
+                {
+                    _logger.LogDebug($"File {filePath} from CodeResult doesn't exist");
+                    return null;
+                }
+
+                return GetQuickFixesFromCodeResult(codeResult, filePath, searchType, searchFilter, wildCardSearch);
+            },
+            new ExecutionDataflowBlockOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount - 1,
+                BoundedCapacity = DataflowBlockOptions.Unbounded
+            });
+
+            var buffer = new BufferBlock<List<QuickFix>>();
+            transform.LinkTo(buffer, new DataflowLinkOptions { PropagateCompletion = true });
+
+            foreach(CodeResult codeResult in codeResults)
+            {
+                await transform.SendAsync(codeResult);
+            }
+            transform.Complete();
+
+            var allFoundSymbols = new List<QuickFix>();
+            while (await buffer.OutputAvailableAsync().ConfigureAwait(false))
+            {
+                foreach (List<QuickFix> symbols in buffer.ReceiveAll().Where(item => item != null))
+                {
+                    allFoundSymbols.AddRange(symbols);
+                }
+            }
+
+            // Propagate an exception if it occurred
+            await buffer.Completion;
+            return allFoundSymbols;
+        }
+
+        private static List<QuickFix> GetQuickFixesFromCodeResult(CodeResult codeResult, string filePath, CodeSearchQueryType searchType,
+            string searchFilter, bool wildCardSearch)
+        {
+            var foundSymbols = new List<QuickFix>();
+            if (!codeResult.Matches.TryGetValue("content", out IEnumerable<Hit> contentHitsEnum))
+            {
+                return foundSymbols;
+            }
+
+            List<Hit> contentHits = contentHitsEnum.ToList();
+            int lineOffsetWin = 0;
+            int lineOffsetUnix = 0;
+            int lineNumber = 0;
+
+            foreach (string line in File.ReadLines(filePath))
+            {
+                foreach (Hit hit in contentHits.OrderBy(h => h.CharOffset))
+                {
+                    // Hit.CharOffset is calculated based on end-of-lines of the file stored by the service which can be different from local file end-of-lines. 
+                    // Try guess what end-of-lines were used by the service and use the first match.
+                    if (hit.CharOffset >= lineOffsetUnix && hit.CharOffset < lineOffsetUnix + line.Length)
+                    {
+                        if (ConsiderMatchCandidate(filePath, searchType, searchFilter, wildCardSearch, hit, lineNumber, lineOffsetUnix, line, foundSymbols))
+                        {
+                            // Keep only a single match per line per hit - it is already clone enough
+                            continue;
+                        }
+                    }
+
+                    if (hit.CharOffset >= lineOffsetWin && hit.CharOffset < lineOffsetWin + line.Length)
+                    {
+                        ConsiderMatchCandidate(filePath, searchType, searchFilter, wildCardSearch, hit, lineNumber, lineOffsetWin, line, foundSymbols);
+                    }
+                }
+
+                if (foundSymbols.Count >= contentHits.Count)
+                {
+                    // Found matching symbols for all hits - can stop searching the file
+                    break;
+                }
+
+                lineOffsetWin += line.Length + 2;
+                lineOffsetUnix += line.Length + 1;
+                lineNumber++;
+            }
+
+            return foundSymbols;
+        }
+
+        private static bool ConsiderMatchCandidate(string filePath, CodeSearchQueryType searchType, string searchFilter, bool wildCardSearch, Hit hit,
+            int lineNumber, int lineOffset, string line, List<QuickFix> foundSymbols)
+        {
+            if (line.Trim().Length >= 2 && line.Trim().Substring(0, 2) == @"//")
+            {
+                // ignore obvious mismatches like comments
+                return false;
+            }
+
+            var symbolLocation = new SymbolLocation
+            {
+                Kind = SymbolKinds.Unknown,
+                FileName = filePath,
+                Line = lineNumber,
+                EndLine = lineNumber,
+                Column = hit.CharOffset - lineOffset,
+                EndColumn = hit.CharOffset - lineOffset + hit.Length,
+                Projects = new List<string>()
+            };
+
+            string symbolText = line.Substring(symbolLocation.Column, Math.Min(hit.Length, line.Length - symbolLocation.Column));
+
+            // VSTS Code Search is case-insensitive. Require complete case match when looking for references or the definition
+            if (!wildCardSearch && !symbolText.Equals(searchFilter, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // Detect the case when local enlistment and VSTS Code Search index is out of sync and skip such hits.
+            // Or the case when the end of lines are different b/w what was used when calculating hit offset of the server vs end of lines in the local file
+            if (wildCardSearch && symbolText.IndexOf(searchFilter, StringComparison.OrdinalIgnoreCase) != 0)
+            {
+                return false;
+            }
+
+            if (searchType == CodeSearchQueryType.FindReferences)
+            {
+                symbolLocation.Text = line.Trim();
+            }
+            else
+            {
+                symbolLocation.Text = symbolText;
+            }
+
+            foundSymbols.Add(symbolLocation);
+            return true;
+        }
+
+        private async Task<SearchHttpClient> GetSearchClientAsync()
+        {
+            if (_repoRoot == null || _repoUri == null)
+            {
+                return null;
+            }
+
+            SearchHttpClient searchClient = null;
+            if (_searchClient == null)
+            {
+                try
+                {
+                    _logger.LogDebug($"Creating VSTS Code Search Client for {_repoUri.AbsoluteUri}");
+                    var connection = new VssConnection(_repoUri, new VssClientCredentials());
+                    searchClient = await connection.GetClientAsync<SearchHttpClient>();
+                    _logger.LogDebug($"Successfully created VSTS Code Search Client for {_repoUri.AbsoluteUri}");
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, $"Failed to create VSTS Code Search Client for {_repoUri.AbsoluteUri}");
+                }
+            }
+
+            lock (_searchClientLock)
+            {
+                if (_searchClient == null && searchClient != null)
+                {
+                    _searchClient = searchClient;
+                }
+            }
+
+            return _searchClient;
         }
 
         public override bool CanOpenDocuments => true;
@@ -71,12 +421,12 @@ namespace OmniSharp
             OnProjectAdded(projectInfo);
         }
 
-        public void AddProjectReference(ProjectId projectId, ProjectReference projectReference)
+        public void AddProjectReference(ProjectId projectId, Microsoft.CodeAnalysis.ProjectReference projectReference)
         {
             OnProjectReferenceAdded(projectId, projectReference);
         }
 
-        public void RemoveProjectReference(ProjectId projectId, ProjectReference projectReference)
+        public void RemoveProjectReference(ProjectId projectId, Microsoft.CodeAnalysis.ProjectReference projectReference)
         {
             OnProjectReferenceRemoved(projectId, projectReference);
         }

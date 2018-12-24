@@ -13,6 +13,7 @@ using OmniSharp.Endpoint.Exports;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.UpdateBuffer;
+using OmniSharp.Options;
 using OmniSharp.Plugins;
 using OmniSharp.Stdio.Protocol;
 
@@ -173,6 +174,11 @@ namespace OmniSharp.Endpoint
             var responses = new List<Task<TResponse>>();
             foreach (var handler in exports.Values)
             {
+                if (HackOptions.Enabled && !handler.Language.Equals(LanguageNames.CSharp, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 responses.Add(handler.Handle(request));
             }
 

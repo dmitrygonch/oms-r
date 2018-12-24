@@ -102,6 +102,11 @@ namespace OmniSharp.MSBuild
             _manager = new ProjectManager(_loggerFactory, _options, _eventEmitter, _fileSystemWatcher, _metadataFileReferenceCache, _packageDependencyChecker, 
                 _loader, _workspace, _eventSinks);
 
+            if (HackOptions.Enabled)
+            {
+                _workspace.InitCodeSearch(_environment.TargetDirectory);
+            }
+
             if (_options.LoadProjectsOnDemand)
             {
                 _logger.LogInformation($"Skip loading projects listed in solution file or under target directory because {Key}:{nameof(MSBuildOptions.LoadProjectsOnDemand)} is true.");

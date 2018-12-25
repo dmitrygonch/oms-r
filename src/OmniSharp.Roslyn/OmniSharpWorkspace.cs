@@ -366,7 +366,7 @@ namespace OmniSharp
                 try
                 {
                     _logger.LogDebug($"Creating VSTS Code Search Client for {_repoUri.AbsoluteUri}");
-                    var connection = new VssConnection(_repoUri, new VssClientCredentials());
+                    var connection = new VssConnection(_repoUri, new VssClientCredentials {Storage = new VssClientCredentialStorage()});
                     searchClient = await connection.GetClientAsync<SearchHttpClient>();
                     _logger.LogDebug($"Successfully created VSTS Code Search Client for {_repoUri.AbsoluteUri}");
                 }

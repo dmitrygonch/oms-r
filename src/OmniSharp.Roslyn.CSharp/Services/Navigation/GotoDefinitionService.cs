@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Composition;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +12,6 @@ using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.GotoDefinition;
 using OmniSharp.Models.Metadata;
-using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
@@ -41,7 +39,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
             var response = new GotoDefinitionResponse();
 
-            if (HackOptions.Enabled && document == null)
+            if (_workspace.HackOptions.Enabled && document == null)
             {
                 _logger.LogDebug($"Couldn't get document for {request.FileName}");
                 return await GetDefinitionFromCodeSearch(request);
@@ -55,7 +53,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 var position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
                 var symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
 
-                if (HackOptions.Enabled && symbol == null)
+                if (_workspace.HackOptions.Enabled && symbol == null)
                 {
                     _logger.LogDebug($"Couldn't get symbol [line {request.Line},column {request.Column}] for {request.FileName}");
                     return await GetDefinitionFromCodeSearch(request);

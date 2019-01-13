@@ -174,7 +174,7 @@ namespace OmniSharp.Endpoint
             var responses = new List<Task<TResponse>>();
             foreach (var handler in exports.Values)
             {
-                if (HackOptions.Enabled && !handler.Language.Equals(LanguageNames.CSharp, StringComparison.Ordinal))
+                if (_workspace.HackOptions.Enabled && !handler.Language.Equals(LanguageNames.CSharp, StringComparison.Ordinal))
                 {
                     continue;
                 }

@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.FindSymbols;
-using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
@@ -35,13 +34,13 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                 return new QuickFixResponse { QuickFixes = Array.Empty<QuickFix>() };
             }
 
-            if (HackOptions.Enabled && string.IsNullOrEmpty(request.Filter))
+            if (_workspace.HackOptions.Enabled && string.IsNullOrEmpty(request.Filter))
             {
                 return new QuickFixResponse { QuickFixes = Array.Empty<QuickFix>() };
             }
 
             var queryCodeSearchTask = Task.FromResult(new List<QuickFix>());
-            if (HackOptions.Enabled)
+            if (_workspace.HackOptions.Enabled)
             {
                 queryCodeSearchTask = _workspace.QueryCodeSearch(request.Filter, 50, QueryCodeSearchTimeout, true, CodeSearchQueryType.FindDefinitions);
             }

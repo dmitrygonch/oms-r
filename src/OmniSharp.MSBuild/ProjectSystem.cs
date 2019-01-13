@@ -88,6 +88,9 @@ namespace OmniSharp.MSBuild
             _options = new MSBuildOptions();
             ConfigurationBinder.Bind(configuration, _options);
 
+            _workspace.HackOptions.Enabled = _options.HackEnabled;
+            _workspace.HackOptions.AuthPat = _options.HackAuthPat;
+
             _sdksPathResolver.Enabled = _options.UseLegacySdkResolver;
             _sdksPathResolver.OverridePath = _options.MSBuildSDKsPath;
 
@@ -102,7 +105,7 @@ namespace OmniSharp.MSBuild
             _manager = new ProjectManager(_loggerFactory, _options, _eventEmitter, _fileSystemWatcher, _metadataFileReferenceCache, _packageDependencyChecker, 
                 _loader, _workspace, _eventSinks);
 
-            if (HackOptions.Enabled)
+            if (_workspace.HackOptions.Enabled)
             {
                 _workspace.InitCodeSearch(_environment.TargetDirectory);
             }

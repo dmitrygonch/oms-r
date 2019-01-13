@@ -11,7 +11,6 @@ using OmniSharp.Helpers;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.FindUsages;
-using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
@@ -28,7 +27,11 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
         public async Task<QuickFixResponse> Handle(FindUsagesRequest request)
         {
-            HackUtils.TryGetSymbolTextForRequest(request, out string symbolText);
+            string symbolText = null;
+            if (_workspace.HackOptions.Enabled)
+            {
+                HackUtils.TryGetSymbolTextForRequest(request, out symbolText);
+            }
 
             var document = _workspace.GetDocument(request.FileName);
             var response = new QuickFixResponse();
@@ -51,7 +54,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                                                 .ThenBy(q => q.Column));
             }
             // Try to get symbol text from the file - this isn't very presize version as file might be modified in memory
-            else if (HackOptions.Enabled)
+            else if (_workspace.HackOptions.Enabled)
             {
                 List<QuickFix> quickFixes = await QueryCodeSearchForRefs(request, symbolText, null, null, 0);
                 response = new QuickFixResponse(quickFixes.Distinct()
@@ -97,7 +100,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
         private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, string symbolText, ISymbol symbol,
             SourceText sourceText, int positionInSourceText)
         {
-            if (!HackOptions.Enabled || request.ExcludeDefinition || request.OnlyThisFile)
+            if (!_workspace.HackOptions.Enabled || request.ExcludeDefinition || request.OnlyThisFile)
             {
                 return Task.FromResult(new List<QuickFix>());
             }

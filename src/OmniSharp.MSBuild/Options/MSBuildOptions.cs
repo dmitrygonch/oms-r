@@ -36,5 +36,8 @@ namespace OmniSharp.Options
 
         // TODO: Allow loose properties
         // public IConfiguration Properties { get; set; }
+
+        public bool HackEnabled { get; set; }
+        public string HackAuthPat { get; set; }
     }
 }

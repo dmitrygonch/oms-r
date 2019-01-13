@@ -11,8 +11,9 @@ namespace OmniSharp.Options
         public FileOptions FileOptions { get; } = new FileOptions();
     }
 
-    public static class HackOptions
+    public class HackOptions
     {
-        public static bool Enabled => Environment.GetEnvironmentVariable("HACK_ENABLED") == "1";
+        public bool Enabled;
+        public string AuthPat;
     }
 }

@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net461</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <AssemblyName>CodeSearchInteractiveProxy</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <PreserveCompilationContext>true</PreserveCompilationContext>
+    <RuntimeIdentifiers>win7-x64;win7-x86</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Services.InteractiveClient" />
+    <PackageReference Include="Microsoft.VisualStudio.Services.Search.Client" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OmniSharp.CodeSearch.Proxy.Shared\OmniSharp.CodeSearch.Proxy.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

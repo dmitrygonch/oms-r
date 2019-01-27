@@ -7,8 +7,8 @@ namespace OmniSharp.Endpoint.Exports
     {
         private readonly IRequestHandler<TRequest, TResponse> _handler;
 
-        public RequestHandlerExportHandler(string language, IRequestHandler<TRequest, TResponse> handler)
-         : base(language)
+        public RequestHandlerExportHandler(string language, bool isAuxiliary, IRequestHandler<TRequest, TResponse> handler)
+         : base(language, isAuxiliary)
         {
             _handler = handler;
         }

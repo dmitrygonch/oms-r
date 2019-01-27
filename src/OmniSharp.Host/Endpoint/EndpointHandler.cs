@@ -46,9 +46,24 @@ namespace OmniSharp.Endpoint
 
     public class EndpointHandler<TRequest, TResponse> : EndpointHandler
     {
+        private class ExportHandlers
+        {
+            public ExportHandlers(
+                List<ExportHandler<TRequest, TResponse>> primaryHandlers, 
+                List<ExportHandler<TRequest, TResponse>> auxiliaryHandlers)
+            {
+                PrimaryHandlers = primaryHandlers;
+                AuxiliaryHandlers = auxiliaryHandlers;
+            }
+
+            public List<ExportHandler<TRequest, TResponse>> PrimaryHandlers {get;}
+            
+            public List<ExportHandler<TRequest, TResponse>> AuxiliaryHandlers {get;}
+        }
+
         private readonly CompositionHost _host;
         private readonly IPredicateHandler _languagePredicateHandler;
-        private readonly Lazy<Task<Dictionary<string, ExportHandler<TRequest, TResponse>>>> _exports;
+        private readonly Lazy<Task<Dictionary<string, ExportHandlers>>> _exports;
         private readonly OmniSharpWorkspace _workspace;
         private readonly bool _hasLanguageProperty;
         private readonly bool _hasFileNameProperty;
@@ -71,22 +86,29 @@ namespace OmniSharp.Endpoint
             _canBeAggregated = typeof(IAggregateResponse).IsAssignableFrom(metadata.ResponseType);
             _updateBufferHandler = updateBufferHandler;
 
-            _exports = new Lazy<Task<Dictionary<string, ExportHandler<TRequest, TResponse>>>>(() => LoadExportHandlers(handlers));
+            _exports = new Lazy<Task<Dictionary<string, ExportHandlers>>>(() => LoadExportHandlers(handlers));
         }
 
-        private Task<Dictionary<string, ExportHandler<TRequest, TResponse>>> LoadExportHandlers(IEnumerable<Lazy<IRequestHandler, OmniSharpRequestHandlerMetadata>> handlers)
+        private Task<Dictionary<string, ExportHandlers>> LoadExportHandlers(IEnumerable<Lazy<IRequestHandler, OmniSharpRequestHandlerMetadata>> handlers)
         {
             var interfaceHandlers = handlers
-                .Select(export => new RequestHandlerExportHandler<TRequest, TResponse>(export.Metadata.Language, (IRequestHandler<TRequest, TResponse>)export.Value))
+                .Select(export => new RequestHandlerExportHandler<TRequest, TResponse>(export.Metadata.Language, export.Metadata.IsAuxiliary, 
+                    (IRequestHandler<TRequest, TResponse>)export.Value))
                 .Cast<ExportHandler<TRequest, TResponse>>();
 
             var plugins = _plugins.Where(x => x.Config.Endpoints.Contains(EndpointName))
                 .Select(plugin => new PluginExportHandler<TRequest, TResponse>(EndpointName, plugin))
                 .Cast<ExportHandler<TRequest, TResponse>>();
 
-            return Task.FromResult(interfaceHandlers
-               .Concat(plugins)
-               .ToDictionary(export => export.Language));
+            var allHandlers = interfaceHandlers.Concat(plugins);
+
+            return Task.FromResult(allHandlers.GroupBy(export => export.Language, StringComparer.OrdinalIgnoreCase)
+                .Select(languageHandlers => (language: languageHandlers.Key, handlers: languageHandlers.GroupBy(export => export.IsAuxiliary)))
+                .ToDictionary(
+                    pair => pair.language,
+                    pair => new ExportHandlers(
+                        pair.handlers.Where(group => !group.Key).SelectMany(primaryHandlers => primaryHandlers).ToList(),
+                        pair.handlers.Where(group => group.Key).SelectMany(auxiliaryHandlers => auxiliaryHandlers).ToList())));
         }
 
         public string EndpointName { get; }
@@ -148,12 +170,73 @@ namespace OmniSharp.Endpoint
             return HandleAllRequest(request, packet);
         }
 
+        private async Task<IAggregateResponse> AggregateResponsesFromHandlers(ExportHandlers requestHandlers, TRequest request)
+        {
+            IAggregateResponse aggregateResponse = null;
+
+            // Auxiliary handlers will have a chance to process the request only after all primary handlers are done with it
+            foreach (var handlers in new []{requestHandlers.PrimaryHandlers, requestHandlers.AuxiliaryHandlers})
+            {
+                var responses = new List<Task<TResponse>>();
+                foreach (var handler in handlers)
+                {
+                    responses.Add(handler.Handle(request));
+                }
+
+                foreach (IAggregateResponse response in await Task.WhenAll(responses))
+                {
+                    if (response != null)
+                    {
+                        if (aggregateResponse != null)
+                        {
+                            // Allow next handler to see aggregated result from all previously invoked handlers
+                            aggregateResponse = response.Merge(aggregateResponse);
+                        }
+                        else
+                        {
+                            aggregateResponse = response;
+                        }
+                    }
+                }
+            }
+
+            return aggregateResponse;
+        }
+
+        private async Task<object> GetFirstNotEmptyResponseFromHandlers(ExportHandlers requestHandlers, TRequest request)
+        {
+            // Auxiliary handlers will have a chance to process the request only after all primary handlers are done with it
+            foreach (var handlers in new []{requestHandlers.PrimaryHandlers, requestHandlers.AuxiliaryHandlers})
+            {
+                var responses = new List<Task<TResponse>>();
+                foreach (var handler in handlers)
+                {
+                    responses.Add(handler.Handle(request));
+                }
+
+                foreach (object response in await Task.WhenAll(responses))
+                {
+                    if (response != null)
+                    {
+                        return response;
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private async Task<object> HandleSingleRequest(string language, TRequest request, RequestPacket packet)
         {
             var exports = await _exports.Value;
-            if (exports.TryGetValue(language, out var handler))
+            if (exports.TryGetValue(language, out var handlers))
             {
-                return await handler.Handle(request);
+                if (_canBeAggregated)
+                {
+                    return await AggregateResponsesFromHandlers(handlers, request);
+                }
+
+                return await GetFirstNotEmptyResponseFromHandlers(handlers, request);
             }
 
             throw new NotSupportedException($"{language} does not support {EndpointName}");
@@ -168,34 +251,26 @@ namespace OmniSharp.Endpoint
 
             var exports = await _exports.Value;
 
+            // Sequentially process the request by handlers for each language
             IAggregateResponse aggregateResponse = null;
-
-            var responses = new List<Task<TResponse>>();
-            foreach (var handler in exports.Values)
+            foreach (var export in exports)
             {
-                responses.Add(handler.Handle(request));
-            }
-
-            foreach (IAggregateResponse exportResponse in await Task.WhenAll(responses))
-            {
-                if (aggregateResponse != null)
+                var exportResponse = await AggregateResponsesFromHandlers(export.Value, request);
+                if (exportResponse != null)
                 {
-                    aggregateResponse = aggregateResponse.Merge(exportResponse);
-                }
-                else
-                {
-                    aggregateResponse = exportResponse;
+                    if (aggregateResponse != null)
+                    {
+                        // Allow results from next language to see aggregated results from all previously invoked handlers
+                        aggregateResponse = exportResponse.Merge(aggregateResponse);
+                    }
+                    else
+                    {
+                        aggregateResponse = exportResponse;
+                    }
                 }
             }
 
-            object response = aggregateResponse;
-
-            if (response != null)
-            {
-                return response;
-            }
-
-            return null;
+            return aggregateResponse;
         }
 
         private LanguageModel GetLanguageModel(JToken jtoken)

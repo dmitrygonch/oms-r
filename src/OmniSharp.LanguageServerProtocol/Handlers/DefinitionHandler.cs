@@ -1,16 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Composition;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using OmniSharp.Extensions.JsonRpc;
-using OmniSharp.Extensions.LanguageServer.Capabilities.Client;
-using OmniSharp.Extensions.LanguageServer.Models;
-using OmniSharp.Extensions.LanguageServer.Protocol;
-using OmniSharp.Mef;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Models.GotoDefinition;
 using static OmniSharp.LanguageServerProtocol.Helpers;
 
@@ -43,7 +38,7 @@ namespace OmniSharp.LanguageServerProtocol.Handlers
             };
         }
 
-        public async Task<LocationOrLocations> Handle(TextDocumentPositionParams request, CancellationToken token)
+        public async Task<LocationOrLocationLinks> Handle(DefinitionParams request, CancellationToken token)
         {
             var omnisharpRequest = new GotoDefinitionRequest()
             {
@@ -56,10 +51,10 @@ namespace OmniSharp.LanguageServerProtocol.Handlers
 
             if (string.IsNullOrWhiteSpace(omnisharpResponse.FileName))
             {
-                return new LocationOrLocations();
+                return new LocationOrLocationLinks();
             }
 
-            return new LocationOrLocations(new Location()
+            return new LocationOrLocationLinks(new Location()
             {
                 Uri = ToUri(omnisharpResponse.FileName),
                 Range = ToRange((omnisharpResponse.Column, omnisharpResponse.Line))

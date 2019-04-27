@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,6 @@ using OmniSharp.Eventing;
 using OmniSharp.MSBuild.Discovery;
 using OmniSharp.Options;
 using OmniSharp.Services;
-using OmniSharp.Stdio.Services;
 using OmniSharp.Utilities;
 using TestUtility.Logging;
 using Xunit.Abstractions;
@@ -47,6 +47,7 @@ namespace TestUtility
             AddService(dotNetCliService);
             AddService(configuration);
             AddService(optionsMonitor);
+            _services[typeof(IAnalyzerAssemblyLoader)] = assemblyLoader;
         }
 
         public static IServiceProvider Create(

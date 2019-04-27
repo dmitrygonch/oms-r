@@ -27,43 +27,59 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 
         public async Task<QuickFixResponse> Handle(FindUsagesRequest request)
         {
-            string symbolText = null;
-            if (_workspace.HackOptions.Enabled)
+            Document document;
+            if (!_workspace.HackOptions.Enabled)
             {
-                HackUtils.TryGetSymbolTextForRequest(request, out symbolText);
+                // To produce complete list of usages for symbols in the document wait until all projects are loaded.
+                document = await _workspace.GetDocumentFromFullProjectModelAsync(request.FileName);
+                if (document == null)
+                {
+                    return new QuickFixResponse();
+                }
+            }
+            else
+            {
+                document = _workspace.GetDocument(request.FileName);
             }
 
-            var document = _workspace.GetDocument(request.FileName);
-            var response = new QuickFixResponse();
+            var quickFixes = new List<QuickFix>();
+            SourceText sourceText = null;
+            int position = 0;
+            ISymbol symbol = null;
             if (document != null)
             {
                 var semanticModel = await document.GetSemanticModelAsync();
-                var sourceText = await document.GetTextAsync();
-                var position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
-                var symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
+                sourceText = await document.GetTextAsync();
+                position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
+                symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
+                var definition = await SymbolFinder.FindSourceDefinitionAsync(symbol, _workspace.CurrentSolution);
+                var usages = request.OnlyThisFile
+                    ? await SymbolFinder.FindReferencesAsync(definition ?? symbol, _workspace.CurrentSolution, ImmutableHashSet.Create(document))
+                    : await SymbolFinder.FindReferencesAsync(definition ?? symbol, _workspace.CurrentSolution);
+                var locations = usages.SelectMany(u => u.Locations).Select(l => l.Location).ToList();
 
-                List<QuickFix> quickFixes = await QueryRoslynForRefs(request, document, symbol);
+                if (!request.ExcludeDefinition)
+                {
+                    // always skip get/set methods of properties from the list of definition locations.
+                    var definitionLocations = usages.Select(u => u.Definition)
+                        .Where(def => !(def is IMethodSymbol method && method.AssociatedSymbol is IPropertySymbol))
+                        .SelectMany(def => def.Locations)
+                        .Where(loc => loc.IsInSource && (!request.OnlyThisFile || loc.SourceTree.FilePath == request.FileName));
 
-                List<QuickFix> codeSearchRefs = await QueryCodeSearchForRefs(request, symbolText, symbol, sourceText, position);
-                HashSet<string> roslynRefFiles = new HashSet<string>(quickFixes.Select(f => f.FileName), StringComparer.OrdinalIgnoreCase);
-                quickFixes.AddRange(codeSearchRefs.Where(r => !roslynRefFiles.Contains(r.FileName)));
+                    locations.AddRange(definitionLocations);
+                }
 
-                response = new QuickFixResponse(quickFixes.Distinct()
-                                                .OrderBy(q => q.FileName)
-                                                .ThenBy(q => q.Line)
-                                                .ThenBy(q => q.Column));
-            }
-            // Try to get symbol text from the file - this isn't very presize version as file might be modified in memory
-            else if (_workspace.HackOptions.Enabled)
-            {
-                List<QuickFix> quickFixes = await QueryCodeSearchForRefs(request, symbolText, null, null, 0);
-                response = new QuickFixResponse(quickFixes.Distinct()
-                                                .OrderBy(q => q.FileName)
-                                                .ThenBy(q => q.Line)
-                                                .ThenBy(q => q.Column));
+                quickFixes = locations.Distinct().Select(l => l.GetQuickFix(_workspace)).ToList();
             }
 
-            return response;
+            List<QuickFix> codeSearchRefs = await QueryCodeSearchForRefs(request, symbol, sourceText, position);
+            HashSet<string> roslynRefFiles = new HashSet<string>(quickFixes.Select(f => f.FileName), StringComparer.OrdinalIgnoreCase);
+            quickFixes.AddRange(codeSearchRefs.Where(r => !roslynRefFiles.Contains(r.FileName)));
+
+            return new QuickFixResponse(quickFixes.Distinct()
+                                            .OrderBy(q => q.FileName)
+                                            .ThenBy(q => q.Line)
+                                            .ThenBy(q => q.Column));
         }
 
         private async Task<List<QuickFix>> QueryRoslynForRefs(FindUsagesRequest request, Document document, ISymbol symbol)
@@ -97,13 +113,15 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             return quickFixes;
         }
 
-        private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, string symbolText, ISymbol symbol,
+        private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, ISymbol symbol,
             SourceText sourceText, int positionInSourceText)
         {
             if (!_workspace.HackOptions.Enabled || request.ExcludeDefinition || request.OnlyThisFile)
             {
                 return Task.FromResult(new List<QuickFix>());
             }
+
+            HackUtils.TryGetSymbolTextForRequest(request, out string symbolText);
 
             // Try to get symbol text from Roslyn's symbol object - this is the most presize option
             if (symbol != null && symbol.Locations != null && symbol.Locations.Any())

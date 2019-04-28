@@ -57,7 +57,7 @@ namespace OmniSharp.MSBuild.Discovery.Providers
                         continue;
                     }
 
-                    if (state != InstanceState.None)
+                    if (state != InstanceState.Complete)
                     {
                         Logger.LogDebug($"Found incomplete Visual Studio installation ({installPath})");
                         continue;

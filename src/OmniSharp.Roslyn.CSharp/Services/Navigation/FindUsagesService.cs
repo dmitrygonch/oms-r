@@ -81,38 +81,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                                             .ThenBy(q => q.Line)
                                             .ThenBy(q => q.Column));
         }
-
-        private async Task<List<QuickFix>> QueryRoslynForRefs(FindUsagesRequest request, Document document, ISymbol symbol)
-        {
-            var definition = await SymbolFinder.FindSourceDefinitionAsync(symbol, _workspace.CurrentSolution);
-            var usages = request.OnlyThisFile
-                ? await SymbolFinder.FindReferencesAsync(definition ?? symbol, _workspace.CurrentSolution, ImmutableHashSet.Create(document))
-                : await SymbolFinder.FindReferencesAsync(definition ?? symbol, _workspace.CurrentSolution);
-
-            var locations = new List<Location>();
-            foreach (var usage in usages.Where(u => u.Definition.CanBeReferencedByName || (symbol as IMethodSymbol)?.MethodKind == MethodKind.Constructor))
-            {
-                foreach (var location in usage.Locations)
-                {
-                    locations.Add(location.Location);
-                }
-
-                if (!request.ExcludeDefinition)
-                {
-                    var definitionLocations = usage.Definition.Locations
-                        .Where(loc => loc.IsInSource && (!request.OnlyThisFile || loc.SourceTree.FilePath == request.FileName));
-
-                    foreach (var location in definitionLocations)
-                    {
-                        locations.Add(location);
-                    }
-                }
-            }
-
-            List<QuickFix> quickFixes = locations.Distinct().Select(l => l.GetQuickFix(_workspace)).ToList();
-            return quickFixes;
-        }
-
+        
         private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, ISymbol symbol,
             SourceText sourceText, int positionInSourceText)
         {

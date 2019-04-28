@@ -36,7 +36,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             //Locate where the string ends
             int endPosition = request.Column;
 
-            while (endPosition < line.Length - 1 && Char.IsLetterOrDigit(line[endPosition]))
+            while (endPosition < line.Length && Char.IsLetterOrDigit(line[endPosition]))
             {
                 endPosition++;
             }

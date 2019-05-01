@@ -40,8 +40,8 @@ namespace OmniSharp
     {
         // HACK data
         private string _repoRoot;
-        private Uri _repoUri;
-        private IDictionary<string, IEnumerable<string>> _searchFilters;
+        private Uri _repoUri = null;
+        private IDictionary<string, IEnumerable<string>> _searchFilters = null;
         public HackOptions HackOptions { get; set; } = new HackOptions();
 
         public bool Initialized { get; set; }
@@ -65,19 +65,10 @@ namespace OmniSharp
             _logger = loggerFactory.CreateLogger<OmniSharpWorkspace>();
         }
 
-        public void InitCodeSearch(string targetDirectory)
+        public void InitCodeSearch(string repoRoot)
         {
-            // Fill in HACK data
-            _repoRoot = GetRepoRootOrNull(targetDirectory);
-            if (_repoRoot != null)
-            {
-                _searchFilters = GetRepoSearchFilters(_repoRoot, out _repoUri);
-            }
-            else
-            {
-                _logger.LogWarning($"Repo root could not be determined");
-            }
-
+            _repoRoot = repoRoot;
+            _searchFilters = GetRepoSearchFilters(_repoRoot, out _repoUri);
             GetSearchClientAsync().FireAndForget(_logger);
         }
 
@@ -93,7 +84,7 @@ namespace OmniSharp
                 RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 
-        private static string GetRepoRootOrNull(string targetDirectory)
+        public static string GetRepoRootOrNull(string targetDirectory)
         {
             if (string.IsNullOrWhiteSpace(targetDirectory) || !Directory.Exists(targetDirectory))
             {

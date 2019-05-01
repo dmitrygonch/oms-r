@@ -25,6 +25,7 @@ namespace OmniSharp.Utilities
 
             try
             {
+                Console.WriteLine($"Launching '{fileName}' with args, '{arguments}'");
                 process.Start();
             }
             catch
@@ -36,7 +37,9 @@ namespace OmniSharp.Utilities
             var output = process.StandardOutput.ReadToEnd();
             process.WaitForExit();
 
-            return output.Trim();
+            var cleanedOutput = output.Trim();
+            Console.WriteLine($"Ran '{fileName}' with args, '{arguments}', output: {Environment.NewLine + cleanedOutput}");
+            return cleanedOutput;
         }
 
         public static ProcessExitStatus Run(

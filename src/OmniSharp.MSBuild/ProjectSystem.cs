@@ -22,6 +22,7 @@ using OmniSharp.Roslyn.CSharp.Services.Diagnostics;
 using OmniSharp.Roslyn.CSharp.Services.Refactoring.V2;
 using OmniSharp.Services;
 using System.Linq;
+using OmniSharp.Utilities;
 
 namespace OmniSharp.MSBuild
 {
@@ -117,7 +118,16 @@ namespace OmniSharp.MSBuild
 
             if (_workspace.HackOptions.Enabled)
             {
-                _workspace.InitCodeSearch(_environment.TargetDirectory);
+                string repoRoot = OmniSharpWorkspace.GetRepoRootOrNull(_environment.TargetDirectory);
+                if (repoRoot != null)
+                {
+                    _workspace.InitCodeSearch(repoRoot);
+                    LoadProjectsForLocalChangesAsync(repoRoot).FireAndForget(_logger);
+                }
+                else
+                {
+                    _logger.LogWarning($"Repo root could not be determined");
+                }
             }
 
             if (_options.LoadProjectsOnDemand)
@@ -137,6 +147,39 @@ namespace OmniSharp.MSBuild
                 }
 
                 _manager.QueueProjectUpdate(projectFilePath, allowAutoRestore: true, projectIdInfo);
+            }
+        }
+
+        private async Task LoadProjectsForLocalChangesAsync(string repoRoot)
+        {
+            string modifiedFiles = ProcessHelper.RunAndCaptureOutput("git", "diff --name-only", repoRoot);
+            string cachedFiles = ProcessHelper.RunAndCaptureOutput("git", "diff --cached --name-only", repoRoot);
+            string commitedFiles = ProcessHelper.RunAndCaptureOutput("git", "diff master..head --name-only", repoRoot);
+
+            List<string> changedFiles = (new[] { modifiedFiles, cachedFiles, commitedFiles })
+                .SelectMany(changes => changes.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (string changedFile in changedFiles)
+            {
+                try
+                {
+                    string fullFilePath = Path.Combine(repoRoot, changedFile);
+                    if (File.Exists(fullFilePath))
+                    {
+                        _logger.LogDebug($"Loading project for changed document {fullFilePath}");
+                        await _workspace.GetDocumentsFromFullProjectModelAsync(fullFilePath);
+                    }
+                    else
+                    {
+                        _logger.LogDebug($"Skipped loading project for changed document {fullFilePath} that was not found on disk.");
+                    }
+                }
+                catch(Exception e)
+                {
+                    _logger.LogWarning($"Exception occurred while loading project for changed document '{changedFile}': {e}");
+                }
             }
         }
 

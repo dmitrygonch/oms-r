@@ -358,7 +358,7 @@ Task("CreateMSBuildFolder")
         "NuGet.Configuration",
         "NuGet.Frameworks",
         "NuGet.ProjectModel",
-        "NuGet.Protocol",   
+        "NuGet.Protocol",
         "NuGet.Versioning"
     };
 
@@ -607,14 +607,7 @@ Task("Build")
 {
     try
     {
-        if (Platform.Current.IsWindows)
-        {
-            BuildWithDotNetCli(env, configuration);
-        }
-        else
-        {
-            BuildWithMSBuild(env, configuration);
-        }
+        BuildWithDotNetCli(env, configuration);
     }
     catch
     {
@@ -731,8 +724,6 @@ string PublishMonoBuild(string project, BuildEnvironment env, BuildPlan plan, st
 
     CopyExtraDependencies(env, outputFolder);
 
-    Package(project, "mono", outputFolder, env.Folders.ArtifactsPackage, env.Folders.DeploymentPackage);
-
      // Copy dependencies of Mono build
      FileHelper.Copy(
          source: CombinePaths(env.Folders.Tools, "SQLitePCLRaw.core", "lib", "net45", "SQLitePCLRaw.core.dll"),
@@ -750,6 +741,8 @@ string PublishMonoBuild(string project, BuildEnvironment env, BuildPlan plan, st
          source: CombinePaths(env.Folders.Tools, "SQLitePCLRaw.bundle_green", "lib", "net45", "SQLitePCLRaw.batteries_green.dll"),
          destination: CombinePaths(outputFolder, "SQLitePCLRaw.batteries_green.dll"),
          overwrite: true);
+
+    Package(project, "mono", outputFolder, env.Folders.ArtifactsPackage, env.Folders.DeploymentPackage);
 
     return outputFolder;
 }
@@ -810,7 +803,7 @@ string PublishWindowsBuild(string project, BuildEnvironment env, BuildPlan plan,
     {
         DotNetCorePublish(projectFileName, new DotNetCorePublishSettings()
         {
-            Runtime = rid,
+            // Runtime = rid, // TODO: With everything today do we need to publish this with a rid?  This appears to be legacy bit when we used to push for all supported dotnet core rids.
             Configuration = configuration,
             OutputDirectory = outputFolder,
             MSBuildSettings = new DotNetCoreMSBuildSettings()
@@ -870,10 +863,26 @@ Task("PublishWindowsBuilds")
     }
 });
 
+Task("PublishNuGet")
+    .IsDependentOn("InstallDotNetCoreSdk")
+    .Does(() => {
+        DotNetCorePack(".", new DotNetCorePackSettings() {
+            Configuration = "Release",
+            OutputDirectory = "./artifacts/nuget/",
+            MSBuildSettings = new DotNetCoreMSBuildSettings()
+                .SetConfiguration(configuration)
+                .WithProperty("PackageVersion", env.VersionInfo.NuGetVersion)
+                .WithProperty("AssemblyVersion", env.VersionInfo.AssemblySemVer)
+                .WithProperty("FileVersion", env.VersionInfo.AssemblySemVer)
+                .WithProperty("InformationalVersion", env.VersionInfo.InformationalVersion),
+        });
+    });
+
 Task("Publish")
     .IsDependentOn("Build")
     .IsDependentOn("PublishMonoBuilds")
-    .IsDependentOn("PublishWindowsBuilds");
+    .IsDependentOn("PublishWindowsBuilds")
+    .IsDependentOn("PublishNuGet");
 
 /// <summary>
 ///  Execute the run script.

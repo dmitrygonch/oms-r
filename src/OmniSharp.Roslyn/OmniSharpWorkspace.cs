@@ -118,7 +118,6 @@ namespace OmniSharp
                     searchFilters.Add("Project", new[] { vstsProjectName });
                     searchFilters.Add("Repository", new[] { vstsRepoName });
                     searchFilters.Add("Branch", new[] { "master" });
-                    searchFilters.Add("Path", new[] { "" });
                     _logger.LogDebug($"Initialized VSTS Code Search filters for {vstsAccountUri.AbsoluteUri}, project {vstsProjectName}, repo {vstsRepoName}");
                 }
                 else
@@ -376,7 +375,7 @@ namespace OmniSharp
                     VssCredentials creds;
                     if (string.IsNullOrWhiteSpace(pat))
                     {
-                        creds = new VssClientCredentials { Storage = new VssClientCredentialStorage() };
+                        creds = new VssClientCredentials();
                     }
                     else
                     {

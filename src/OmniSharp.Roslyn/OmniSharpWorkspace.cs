@@ -163,6 +163,7 @@ namespace OmniSharp
             return true;
         }
 
+        // TODO: Cache results with absolute timeout with MemoryCache
         public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration, bool wildCardSearch, CodeSearchQueryType searchType)
         {
             List<QuickFix> result = null;

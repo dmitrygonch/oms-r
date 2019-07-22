@@ -174,7 +174,7 @@ namespace OmniSharp
                     searchTypeString = $"def:{filter}";
                     break;
                 case CodeSearchQueryType.FindReferences:
-                    searchTypeString = $"{filter}"; // Don't use 'ref:' because this removes for example 'new SomeClass' references from the result
+                    searchTypeString = $"ref:{filter}";
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown search type {searchType}");

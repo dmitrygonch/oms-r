@@ -85,7 +85,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
         private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, ISymbol symbol,
             SourceText sourceText, int positionInSourceText)
         {
-            if (!_workspace.HackOptions.Enabled || request.OnlyThisFile)
+            if (!_workspace.HackOptions.Enabled || request.OnlyThisFile || symbol.DeclaredAccessibility == Accessibility.Private)
             {
                 return Task.FromResult(new List<QuickFix>());
             }

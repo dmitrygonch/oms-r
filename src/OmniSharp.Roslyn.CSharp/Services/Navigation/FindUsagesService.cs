@@ -85,7 +85,9 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
         private Task<List<QuickFix>> QueryCodeSearchForRefs(FindUsagesRequest request, ISymbol symbol,
             SourceText sourceText, int positionInSourceText)
         {
-            if (!_workspace.HackOptions.Enabled || request.OnlyThisFile || symbol.DeclaredAccessibility == Accessibility.Private)
+            // OnlyThisFile is supplied for CodeLense requests which won't benefit from VSTS data.
+            // If symbol is available then avoid querying VSTS for private symbols because all their references will be already loaded in Roslyn's workspace.
+            if (!_workspace.HackOptions.Enabled || request.OnlyThisFile || (symbol != null && symbol.DeclaredAccessibility == Accessibility.Private))
             {
                 return Task.FromResult(new List<QuickFix>());
             }

@@ -18,12 +18,12 @@ namespace OmniSharp
         private readonly IEnumerable<ISyntaxFeaturesDiscover> _featureDiscovers;
         private string _currentProject;
         private SemanticModel _semanticModel;
-        private Action<FileMemberElement> _customAction;
+        private Action<FileMemberElement, string> _customAction;
 
         public static async Task<IEnumerable<FileMemberElement>> Compute(
             IEnumerable<Document> documents,
             IEnumerable<ISyntaxFeaturesDiscover> featureDiscovers,
-            Action<FileMemberElement> customAction = null)
+            Action<FileMemberElement, string> customAction = null)
         {
             var root = new FileMemberElement() { ChildNodes = new List<FileMemberElement>() };
             var visitor = new StructureComputer(root, featureDiscovers, customAction);
@@ -39,7 +39,7 @@ namespace OmniSharp
         public static Task<IEnumerable<FileMemberElement>> Compute(IEnumerable<Document> documents) 
             => Compute(documents, Enumerable.Empty<ISyntaxFeaturesDiscover>());
 
-        private StructureComputer(FileMemberElement root, IEnumerable<ISyntaxFeaturesDiscover> featureDiscovers, Action<FileMemberElement> customAction)
+        private StructureComputer(FileMemberElement root, IEnumerable<ISyntaxFeaturesDiscover> featureDiscovers, Action<FileMemberElement, string> customAction)
         {
             _featureDiscovers = featureDiscovers ?? Enumerable.Empty<ISyntaxFeaturesDiscover>();
             _customAction = customAction;
@@ -89,7 +89,7 @@ namespace OmniSharp
 
             if (_customAction != null)
             {
-                _customAction(ret);
+                _customAction(ret, _currentProject);
             }
 
             return ret;

@@ -125,15 +125,15 @@ namespace OmniSharp.DotNetTest.Services
 
         private TestInfo[] DiscoverAllLoadedTests()
         {
-            var testMethods = new List<FileMemberElement>();
+            var testMethods = new List<Tuple<FileMemberElement, string>>();
 
             foreach (Project project in _workspace.CurrentSolution.Projects)
             {
-                StructureComputer.Compute(project.Documents, _testDiscovers, element =>
+                StructureComputer.Compute(project.Documents, _testDiscovers, (element, projectName) =>
                 {
                     if (element.Features.Count > 0)
                     {
-                        testMethods.Add(element);
+                        testMethods.Add(new Tuple<FileMemberElement, string>(element, projectName));
                     }
                 }
                 ).GetAwaiter().GetResult();
@@ -141,11 +141,11 @@ namespace OmniSharp.DotNetTest.Services
 
             return testMethods.Select(m => new TestInfo
             {
-                Id = m.Features.Single().Data,
-                Label = m.Location.Text,
-                File = m.Location.FileName,
-                Project = m.Projects.FirstOrDefault(),
-                Line = m.Location.Line,
+                Id = m.Item1.Features.Single().Data,
+                Label = m.Item1.Location.Text,
+                File = m.Item1.Location.FileName,
+                Project = m.Item2,
+                Line = m.Item1.Location.Line,
             }).ToArray();
         }
         private void RunTests(TestInfo[] infos)

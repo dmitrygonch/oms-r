@@ -49,6 +49,11 @@ namespace OmniSharp.DotNetTest.Services
 
         public void Run()
         {
+            Task.Run(HandleRpcMEssages).FireAndForget(_logger);
+        }
+
+        private Task HandleRpcMEssages()
+        {
             var listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             listener.Bind(new IPEndPoint(IPAddress.Loopback, 12345));
             listener.Listen(1);
@@ -58,11 +63,6 @@ namespace OmniSharp.DotNetTest.Services
             _reader = new BinaryReader(_stream);
             _writer = new BinaryWriter(_stream);
 
-            Task.Run(HandleRpcMEssages).FireAndForget(_logger);
-        }
-
-        private Task HandleRpcMEssages()
-        {
             while (true)
             {
                 try

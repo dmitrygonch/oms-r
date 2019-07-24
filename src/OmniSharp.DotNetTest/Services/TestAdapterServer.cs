@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
 using OmniSharp.Abstractions.Services;
+using OmniSharp.DotNetTest.Models;
 using OmniSharp.Eventing;
 using OmniSharp.Models.MembersTree;
 using OmniSharp.MSBuild;
@@ -72,11 +73,19 @@ namespace OmniSharp.DotNetTest.Services
                     switch (request.MessageType)
                     {
                         case "enumtests":
+                            {
+                                TestInfo[] infos = DiscoverAllLoadedTests();
+                                SendMessage("enumtests", infos);
+                                break;
+                            }
 
-                            TestInfo[] infos = DiscoverAllLoadedTests();
-                            SendMessage("enumtests", infos);
+                        case "runtests":
+                            {
+                                TestInfo[] infos = JsonDataSerializer.Instance.DeserializePayload<TestInfo[]>(request);
+                                RunTests(infos);
+                                break;
+                            }
 
-                            break;
                         default:
                             _logger.LogWarning($"Unknown message type '{request.MessageType}'");
                             break;
@@ -139,6 +148,33 @@ namespace OmniSharp.DotNetTest.Services
                 Line = m.Location.Line,
             }).ToArray();
         }
+        private void RunTests(TestInfo[] infos)
+        {
+            IEnumerable<IGrouping<string, TestInfo>> groups = infos.GroupBy(i => i.Project, StringComparer.OrdinalIgnoreCase);
+            foreach (IGrouping<string, TestInfo> group in groups)
+            {
+                using (var testManager = CreateTestManager(group.First().File))
+                {
+                    RunTestResponse fullResults = testManager.RunTest(group.Select(i => i.Id).ToArray(), "mstest", ".NETFramework,Version=v4.7.2");
+                    RunTestResult[] results = fullResults.Results.Select(r =>
+                    new RunTestResult
+                    {
+                        Id = r.MethodName,
+                        Outcome = r.Outcome,
+                        ErrorMessage = r.ErrorMessage,
+                        ErrorStackTrace = r.ErrorStackTrace
+
+                    }).ToArray();
+                    SendMessage("runtests", results);
+                }
+            }
+        }
+
+        TestManager CreateTestManager(string fileName)
+        {
+            Document document = _workspace.GetDocument(fileName);
+            return TestManager.Start(document.Project, _dotNetCli, _eventEmitter, _loggerFactory);
+        }
     }
 
     public class TestInfo
@@ -148,6 +184,14 @@ namespace OmniSharp.DotNetTest.Services
         public string File { get; set; } // full path
         public string Project { get; set; } 
         public int Line { get; set; }
+    }
+
+    public class RunTestResult
+    {
+        public string Id { get; set; } // full type name
+        public string Outcome { get; set; }
+        public string ErrorMessage { get; set; }
+        public string ErrorStackTrace { get; set; }
     }
 
 }

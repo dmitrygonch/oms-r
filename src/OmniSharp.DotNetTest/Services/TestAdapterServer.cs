@@ -99,7 +99,7 @@ namespace OmniSharp.DotNetTest.Services
                 sb.Append(_reader.ReadChar());
             }
 
-            string rawMessage = sb.ToString().Substring(0, sb.Length - EndOfString.Length - 1);
+            string rawMessage = sb.ToString().Substring(0, sb.Length - EndOfString.Length);
             _logger.LogDebug($"read: {rawMessage}");
 
             return JsonDataSerializer.Instance.DeserializeMessage(rawMessage);
@@ -110,8 +110,8 @@ namespace OmniSharp.DotNetTest.Services
             var rawMessage = JsonDataSerializer.Instance.SerializePayload(messageType, payload);
             _logger.LogDebug($"send: {rawMessage}");
 
-            _writer.Write(rawMessage.ToCharArray());
-            _writer.Write(EndOfString);
+            byte[] bytes = Encoding.ASCII.GetBytes(rawMessage + EndOfString);
+            _writer.Write(bytes);
         }
 
         private TestInfo[] DiscoverAllLoadedTests()

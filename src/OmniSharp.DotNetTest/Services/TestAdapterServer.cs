@@ -14,6 +14,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace OmniSharp.DotNetTest.Services
@@ -88,9 +89,17 @@ namespace OmniSharp.DotNetTest.Services
             }
         }
 
+        private const string EndOfString = "<EOF>";
+
         private Message ReadMessage()
         {
-            var rawMessage = _reader.ReadString();
+            StringBuilder sb = new StringBuilder();
+            while (sb.Length < EndOfString.Length || sb.ToString().Substring(sb.Length - EndOfString.Length, EndOfString.Length) != EndOfString)
+            {
+                sb.Append(_reader.ReadChar());
+            }
+
+            string rawMessage = sb.ToString().Substring(0, sb.Length - EndOfString.Length - 1);
             _logger.LogDebug($"read: {rawMessage}");
 
             return JsonDataSerializer.Instance.DeserializeMessage(rawMessage);
@@ -101,7 +110,8 @@ namespace OmniSharp.DotNetTest.Services
             var rawMessage = JsonDataSerializer.Instance.SerializePayload(messageType, payload);
             _logger.LogDebug($"send: {rawMessage}");
 
-            _writer.Write(rawMessage);
+            _writer.Write(rawMessage.ToCharArray());
+            _writer.Write(EndOfString);
         }
 
         private TestInfo[] DiscoverAllLoadedTests()

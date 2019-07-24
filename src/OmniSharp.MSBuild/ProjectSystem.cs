@@ -26,6 +26,11 @@ using OmniSharp.Utilities;
 
 namespace OmniSharp.MSBuild
 {
+    public interface ITestAdapterServer
+    {
+        void Run();
+    }
+
     [ExportProjectSystem(ProjectSystemNames.MSBuildProjectSystem), Shared]
     internal class ProjectSystem : IProjectSystem
     {
@@ -42,6 +47,7 @@ namespace OmniSharp.MSBuild
         private readonly ILogger _logger;
         private readonly IAnalyzerAssemblyLoader _assemblyLoader;
         private readonly ImmutableArray<IMSBuildEventSink> _eventSinks;
+        private readonly ITestAdapterServer _testAdapterServer;
         private PackageDependencyChecker _packageDependencyChecker;
         private ProjectManager _manager;
         private ProjectLoader _loader;
@@ -67,6 +73,7 @@ namespace OmniSharp.MSBuild
             ILoggerFactory loggerFactory,
             CachingCodeFixProviderForProjects codeFixesForProjects,
             IAnalyzerAssemblyLoader assemblyLoader,
+            ITestAdapterServer testAdapterServer,
             [ImportMany] IEnumerable<IMSBuildEventSink> eventSinks)
         {
             _environment = environment;
@@ -82,6 +89,7 @@ namespace OmniSharp.MSBuild
             _eventSinks = eventSinks.ToImmutableArray();
             _logger = loggerFactory.CreateLogger<ProjectSystem>();
             _assemblyLoader = assemblyLoader;
+            _testAdapterServer = testAdapterServer;
         }
 
         public void Initalize(IConfiguration configuration)
@@ -116,6 +124,8 @@ namespace OmniSharp.MSBuild
                 {
                     _workspace.InitCodeSearch(repoRoot);
                     LoadProjectsForLocalChangesAsync(repoRoot).FireAndForget(_logger);
+
+                    _testAdapterServer.Run();
                 }
                 else
                 {

@@ -105,10 +105,10 @@ namespace OmniSharp.DotNetTest
                 throw new InvalidOperationException("Already connected.");
             }
 
-            if (!PrepareToConnect())
-            {
-                return;
-            }
+            //if (!PrepareToConnect())
+            //{
+            //    return;
+            //}
 
             var port = FindFreePort();
 

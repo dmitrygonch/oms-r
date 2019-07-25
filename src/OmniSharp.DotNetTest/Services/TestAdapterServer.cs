@@ -1,6 +1,7 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using OmniSharp.Abstractions.Services;
 using OmniSharp.DotNetTest.Models;
 using OmniSharp.Eventing;
@@ -20,8 +21,26 @@ using System.Threading.Tasks;
 
 namespace OmniSharp.DotNetTest.Services
 {
+    internal interface ITestEventsSubscriber
+    {
+        void OnStarting(IEnumerable<string> testNames);
+        void OnUpdate(IEnumerable<TestResult> testResults);
+    }
+
+    internal class NoopTestEventsSubscriber : ITestEventsSubscriber
+    {
+        public void OnStarting(IEnumerable<string> testNames)
+        {
+        }
+
+        public void OnUpdate(IEnumerable<TestResult> testResults)
+        {
+        }
+    }
+
     [Export(typeof(ITestAdapterServer)), Shared]
-    internal class TestAdapterServer : ITestAdapterServer
+    [Export(typeof(ITestEventsSubscriber))]
+    internal class TestAdapterServer : ITestAdapterServer, ITestEventsSubscriber
     {
         private readonly OmniSharpWorkspace _workspace;
         private readonly IDotNetCliService _dotNetCli;
@@ -173,7 +192,33 @@ namespace OmniSharp.DotNetTest.Services
         TestManager CreateTestManager(string fileName)
         {
             Document document = _workspace.GetDocument(fileName);
-            return TestManager.Start(document.Project, _dotNetCli, _eventEmitter, _loggerFactory);
+            return TestManager.Start(document.Project, _dotNetCli, _eventEmitter, _loggerFactory, new ITestEventsSubscriber[] { new NoopTestEventsSubscriber() });
+        }
+
+        public void OnStarting(IEnumerable<string> testNames)
+        {
+            RunTestResult[] results = testNames.Select(n =>
+            new RunTestResult
+            {
+                Id = n,
+                Outcome = "running"
+
+            }).ToArray();
+            SendMessage("runtests", results);
+        }
+
+        public void OnUpdate(IEnumerable<TestResult> testResults)
+        {
+            RunTestResult[] results = testResults.Select(r =>
+            new RunTestResult
+            {
+                Id = r.TestCase.FullyQualifiedName,
+                Outcome = r.Outcome.ToString().ToLowerInvariant(),
+                ErrorMessage = r.ErrorMessage,
+                ErrorStackTrace = r.ErrorStackTrace
+
+            }).ToArray();
+            SendMessage("runtests", results);
         }
     }
 

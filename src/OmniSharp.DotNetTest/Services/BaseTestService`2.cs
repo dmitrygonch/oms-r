@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
@@ -12,8 +13,9 @@ namespace OmniSharp.DotNetTest.Services
     internal abstract class BaseTestService<TRequest, TResponse> : BaseTestService, IRequestHandler<TRequest, TResponse>
         where TRequest: Request
     {
-        protected BaseTestService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
-            : base(workspace, dotNetCli, eventEmitter, loggerFactory)
+        protected BaseTestService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            IEnumerable<ITestEventsSubscriber> testEventSubscribers)
+            : base(workspace, dotNetCli, eventEmitter, loggerFactory, testEventSubscribers)
         {
         }
 

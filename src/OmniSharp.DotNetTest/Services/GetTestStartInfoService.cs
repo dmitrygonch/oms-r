@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Composition;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
@@ -12,8 +13,9 @@ namespace OmniSharp.DotNetTest.Services
     internal class GetTestStartInfoService : BaseTestService<GetTestStartInfoRequest, GetTestStartInfoResponse>
     {
         [ImportingConstructor]
-        public GetTestStartInfoService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
-            : base(workspace, dotNetCli, eventEmitter, loggerFactory)
+        public GetTestStartInfoService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            [ImportMany] IEnumerable<ITestEventsSubscriber> testEventSubscribers)
+            : base(workspace, dotNetCli, eventEmitter, loggerFactory, testEventSubscribers)
         {
         }
 

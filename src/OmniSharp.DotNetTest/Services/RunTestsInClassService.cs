@@ -1,4 +1,5 @@
-﻿using System.Composition;
+﻿using System.Collections.Generic;
+using System.Composition;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using OmniSharp.DotNetTest.Models;
@@ -12,8 +13,9 @@ namespace OmniSharp.DotNetTest.Services
     internal class RunTestsInClassService : BaseTestService<RunTestsInClassRequest, RunTestResponse>
     {
         [ImportingConstructor]
-        public RunTestsInClassService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
-            : base(workspace, dotNetCli, eventEmitter, loggerFactory)
+        public RunTestsInClassService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            [ImportMany] IEnumerable<ITestEventsSubscriber> testEventSubscribers)
+            : base(workspace, dotNetCli, eventEmitter, loggerFactory, testEventSubscribers)
         {
         }
 

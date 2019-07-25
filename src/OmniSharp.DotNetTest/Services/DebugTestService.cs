@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Composition;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,8 +24,9 @@ namespace OmniSharp.DotNetTest.Services
         private DebugSessionManager _debugSessionManager;
 
         [ImportingConstructor]
-        public DebugTestService(DebugSessionManager debugSessionManager, OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
-            : base(workspace, dotNetCli, eventEmitter, loggerFactory)
+        public DebugTestService(DebugSessionManager debugSessionManager, OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter,
+            ILoggerFactory loggerFactory, [ImportMany] IEnumerable<ITestEventsSubscriber> testEventSubscribers)
+            : base(workspace, dotNetCli, eventEmitter, loggerFactory, testEventSubscribers)
         {
             _debugSessionManager = debugSessionManager;
         }

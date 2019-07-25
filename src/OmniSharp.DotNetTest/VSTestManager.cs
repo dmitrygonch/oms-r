@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using NuGet.Versioning;
 using OmniSharp.DotNetTest.Models;
+using OmniSharp.DotNetTest.Services;
 using OmniSharp.DotNetTest.TestFrameworks;
 using OmniSharp.Eventing;
 using OmniSharp.Services;
@@ -21,9 +22,13 @@ namespace OmniSharp.DotNetTest
 {
     internal class VSTestManager : TestManager
     {
-        public VSTestManager(Project project, string workingDirectory, IDotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        private readonly IEnumerable<ITestEventsSubscriber> _testEventSubscribers;
+
+        public VSTestManager(Project project, string workingDirectory, IDotNetCliService dotNetCli, SemanticVersion dotNetCliVersion, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            IEnumerable<ITestEventsSubscriber> testEventSubscribers)
             : base(project, workingDirectory, dotNetCli, dotNetCliVersion, eventEmitter, loggerFactory.CreateLogger<VSTestManager>())
         {
+            _testEventSubscribers = testEventSubscribers;
         }
 
         private object GetDefaultRunSettings(string targetFrameworkVersion)
@@ -199,6 +204,8 @@ namespace OmniSharp.DotNetTest
 
             if (testCases.Length > 0)
             {
+                NotifySubscribers(testCases.Select(t => t.FullyQualifiedName));
+
                 // Now, run the tests.
                 SendMessage(MessageType.TestRunSelectedTestCasesDefaultHost,
                     new
@@ -222,6 +229,7 @@ namespace OmniSharp.DotNetTest
                         case MessageType.TestRunStatsChange:
                             var testRunChange = message.DeserializePayload<TestRunChangedEventArgs>();
                             testResults.AddRange(testRunChange.NewTestResults);
+                            NotifySubscribers(testRunChange.NewTestResults);
                             break;
 
                         case MessageType.ExecutionComplete:
@@ -229,6 +237,7 @@ namespace OmniSharp.DotNetTest
                             if (payload.LastRunTests != null && payload.LastRunTests.NewTestResults != null)
                             {
                                 testResults.AddRange(payload.LastRunTests.NewTestResults);
+                                NotifySubscribers(payload.LastRunTests.NewTestResults);
                             }
                             done = true;
                             break;
@@ -255,6 +264,22 @@ namespace OmniSharp.DotNetTest
                 Results = results.ToArray(),
                 Pass = !testResults.Any(r => r.Outcome == TestOutcome.Failed)
             };
+        }
+
+        private void NotifySubscribers(IEnumerable<string> testNames)
+        {
+            foreach (ITestEventsSubscriber subscriber in _testEventSubscribers)
+            {
+                subscriber.OnStarting(testNames);
+            }
+        }
+
+        private void NotifySubscribers(IEnumerable<TestResult> testResults)
+        {
+            foreach(ITestEventsSubscriber subscriber in _testEventSubscribers)
+            {
+                subscriber.OnUpdate(testResults);
+            }
         }
 
         private async Task<TestCase[]> DiscoverTestsAsync(string[] methodNames, string targetFrameworkVersion, CancellationToken cancellationToken)

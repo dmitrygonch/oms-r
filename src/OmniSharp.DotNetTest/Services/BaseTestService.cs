@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using OmniSharp.Eventing;
 using OmniSharp.Services;
+using System.Collections.Generic;
 
 namespace OmniSharp.DotNetTest.Services
 {
@@ -10,20 +11,23 @@ namespace OmniSharp.DotNetTest.Services
         protected readonly IDotNetCliService DotNetCli;
         protected readonly IEventEmitter EventEmitter;
         protected readonly ILoggerFactory LoggerFactory;
+        protected readonly IEnumerable<ITestEventsSubscriber> TestEventSubscribers;
 
-        protected BaseTestService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        protected BaseTestService(OmniSharpWorkspace workspace, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            IEnumerable<ITestEventsSubscriber> testEventSubscribers)
         {
             Workspace = workspace;
             DotNetCli = dotNetCli;
             EventEmitter = eventEmitter;
             LoggerFactory = loggerFactory;
+            TestEventSubscribers = testEventSubscribers;
         }
 
         protected TestManager CreateTestManager(string fileName)
         {
             var document = Workspace.GetDocument(fileName);
 
-            return TestManager.Start(document.Project, DotNetCli, EventEmitter, LoggerFactory);
+            return TestManager.Start(document.Project, DotNetCli, EventEmitter, LoggerFactory, TestEventSubscribers);
         }
     }
 }

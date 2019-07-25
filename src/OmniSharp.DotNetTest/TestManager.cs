@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -14,6 +15,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using NuGet.Versioning;
 using OmniSharp.DotNetTest.Models;
 using OmniSharp.DotNetTest.Models.Events;
+using OmniSharp.DotNetTest.Services;
 using OmniSharp.Eventing;
 using OmniSharp.Services;
 using OmniSharp.Utilities;
@@ -50,14 +52,16 @@ namespace OmniSharp.DotNetTest
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public static TestManager Start(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        public static TestManager Start(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            IEnumerable<ITestEventsSubscriber> testEventSubscribers)
         {
-            var manager = Create(project, dotNetCli, eventEmitter, loggerFactory);
+            var manager = Create(project, dotNetCli, eventEmitter, loggerFactory, testEventSubscribers);
             manager.Connect();
             return manager;
         }
 
-        public static TestManager Create(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory)
+        public static TestManager Create(Project project, IDotNetCliService dotNetCli, IEventEmitter eventEmitter, ILoggerFactory loggerFactory,
+            IEnumerable<ITestEventsSubscriber> testEventSubscribers)
         {
             var workingDirectory = Path.GetDirectoryName(project.FilePath);
 
@@ -68,7 +72,7 @@ namespace OmniSharp.DotNetTest
                 throw new NotSupportedException("Legacy .NET SDK is not supported");
             }
             
-            return (TestManager)new VSTestManager(project, workingDirectory, dotNetCli, version, eventEmitter, loggerFactory);
+            return (TestManager)new VSTestManager(project, workingDirectory, dotNetCli, version, eventEmitter, loggerFactory, testEventSubscribers);
         }
 
         protected abstract string GetCliTestArguments(int port, int parentProcessId);

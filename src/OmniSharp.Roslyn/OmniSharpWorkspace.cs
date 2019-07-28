@@ -29,6 +29,7 @@ using OmniSharp.Roslyn.Utilities;
 using OmniSharp.Utilities;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.IdentityModel.Clients.ActiveDirectory;
 
 namespace OmniSharp
 {
@@ -385,7 +386,7 @@ namespace OmniSharp
                     VssCredentials creds;
                     if (string.IsNullOrWhiteSpace(pat))
                     {
-                        creds = new VssClientCredentials();
+                        creds = await GetVssCredsAsync();
                     }
                     else
                     {
@@ -414,6 +415,40 @@ namespace OmniSharp
             }
 
             return _searchClient;
+        }
+
+        // Use ADAL auth instead of interactive client library (VssClientCredentials) since the former seems to be working in more scenarios comparting to the latter. Links with details:
+        //  - https://docs.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/authentication-guidance?view=azure-devops
+        //  - https://github.com/microsoft/azure-devops-auth-samples/blob/master/ManagedClientConsoleAppSample/Program.cs
+        public const string VstsAppId = "499b84ac-1321-427f-aa17-267ca6975798";
+        public const string VstsAadClient = "872cd9fa-d31f-45e0-9eab-6e460a02d1f1";
+        public static readonly Uri AuthRedirectUrl = new Uri("urn:ietf:wg:oauth:2.0:oob");
+
+        private static async Task<VssCredentials> GetVssCredsAsync()
+        {
+            var ctx = new AuthenticationContext("https://login.windows.net/common");
+            AuthenticationResult authResult = null;
+            try
+            {
+                // First try to aquire auth token silently.
+                authResult = await ctx.AcquireTokenAsync(
+                    VstsAppId,
+                    VstsAadClient,
+                    AuthRedirectUrl,
+                    new PlatformParameters(PromptBehavior.Never));
+            }
+            catch (AdalException e)
+            {
+                // If that failed then pop up dialog to authenticate.
+                Console.Write($"Failed to get auth token silently: {e.Message}");
+                authResult = await ctx.AcquireTokenAsync(
+                    VstsAppId,
+                    VstsAadClient,
+                    AuthRedirectUrl,
+                    new PlatformParameters(PromptBehavior.Auto));
+            }
+
+            return new VssAadCredential(new VssAadToken("Bearer", authResult.AccessToken));
         }
 
         public override bool CanOpenDocuments => true;

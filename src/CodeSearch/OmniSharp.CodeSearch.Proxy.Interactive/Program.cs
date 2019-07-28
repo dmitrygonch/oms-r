@@ -18,7 +18,7 @@ namespace OmniSharp.CodeSearch.Proxy.Interactive
     // UNDONE: this is an example of accessing Code Search service using interactive authentication. Works on Windows only..
     public class Program
     {
-        // Use ADAL auth instead of interactive client library (VssClientCredentials) since the former seems to be working in more cases for comparting to the latter.Links with details:
+        // Use ADAL auth instead of interactive client library (VssClientCredentials) since the former seems to be working in more scenarios comparting to the latter. Links with details:
         //  - https://docs.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/authentication-guidance?view=azure-devops
         //  - https://github.com/microsoft/azure-devops-auth-samples/blob/master/ManagedClientConsoleAppSample/Program.cs
         public const string VstsAppId = "499b84ac-1321-427f-aa17-267ca6975798";

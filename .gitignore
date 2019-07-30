@@ -27,6 +27,7 @@ nuget.exe
 debugSettings.json
 buildlog
 /.vs
+.vs/
 *.lock.json
 /omnisharp*.tar.gz
 scripts/Omnisharp*

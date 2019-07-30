@@ -28,6 +28,7 @@ using OmniSharp.Roslyn;
 using OmniSharp.Roslyn.Utilities;
 using OmniSharp.Utilities;
 using Microsoft.VisualStudio.Services.Common;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace OmniSharp
 {
@@ -44,6 +45,7 @@ namespace OmniSharp
         private string _repoRoot;
         private Uri _repoUri = null;
         private IDictionary<string, IEnumerable<string>> _searchFilters = null;
+        private readonly IMemoryCache _memCache = new MemoryCache(new MemoryCacheOptions());
         public HackOptions HackOptions { get; set; } = new HackOptions();
 
         public bool Initialized { get; set; }
@@ -163,7 +165,6 @@ namespace OmniSharp
             return true;
         }
 
-        // TODO: Cache results with absolute timeout with MemoryCache
         public async Task<List<QuickFix>> QueryCodeSearch(string filter, int maxResults, TimeSpan maxDuration, bool wildCardSearch, CodeSearchQueryType searchType)
         {
             List<QuickFix> result = null;
@@ -189,6 +190,13 @@ namespace OmniSharp
                 IncludeFacets = false
             };
 
+            if (_memCache.TryGetValue(request.SearchText, out object cachedValue))
+            {
+                var cachedResults = (List<QuickFix>) cachedValue;
+                _logger.LogDebug($"Reusing cached value for VSTS Code Search filter '{request.SearchText}' that contains {cachedResults.Count()} result(s)");
+                return cachedResults;
+            }
+
             try
             {
                 _logger.LogDebug($"Querying VSTS Code Search with filter '{request.SearchText}'");
@@ -207,6 +215,7 @@ namespace OmniSharp
                     if (response != null)
                     {
                         result = await GetQuickFixesFromCodeResults(response.Results, searchType, filter, wildCardSearch);
+                        _memCache.Set(request.SearchText, result, TimeSpan.FromMinutes(5));
                     }
                 }
             }

@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Eventing;
 using OmniSharp.FileWatching;
+using OmniSharp.Models.Diagnostics;
 using OmniSharp.Models.FilesChanged;
 using OmniSharp.Services;
 using TestUtility;
@@ -32,10 +33,12 @@ namespace OmniSharp.MSBuild.Tests
             {
                 await host.RestoreProject(testProject);
 
+                await Task.Delay(2000);
+
                 var diagnostics = await host.RequestCodeCheckAsync(Path.Combine(testProject.Directory, "Program.cs"));
 
                 Assert.NotEmpty(diagnostics.QuickFixes);
-                Assert.Contains(diagnostics.QuickFixes, x => x.ToString().Contains("IDE0060")); // Unused args.
+                Assert.Contains(diagnostics.QuickFixes.OfType<DiagnosticLocation>(), x => x.Id == "IDE0060"); // Unused args.
             }
         }
 
@@ -112,7 +115,8 @@ namespace OmniSharp.MSBuild.Tests
             }
         }
 
-        [Fact]
+        // Unstable with MSBuild 16.3 on *nix
+        [ConditionalFact(typeof(WindowsOnly))]
         public async Task WhenNewAnalyzerReferenceIsAdded_ThenAutomaticallyUseItWithoutRestart()
         {
             var emitter = new ProjectLoadTestEventEmitter();
@@ -137,7 +141,7 @@ namespace OmniSharp.MSBuild.Tests
 
                 var diagnostics = await host.RequestCodeCheckAsync(Path.Combine(testProject.Directory, "Program.cs"));
 
-                Assert.Contains(diagnostics.QuickFixes, x => x.Text.Contains("RCS1102")); // Analysis result from roslynator.
+                Assert.Contains(diagnostics.QuickFixes.OfType<DiagnosticLocation>(), x => x.Id == "RCS1102"); // Analysis result from roslynator.
             }
         }
 

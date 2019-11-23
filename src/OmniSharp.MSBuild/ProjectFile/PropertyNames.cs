@@ -9,6 +9,7 @@
         public const string BuildProjectReferences = nameof(BuildProjectReferences);
         public const string BuildingInsideVisualStudio = nameof(BuildingInsideVisualStudio);
         public const string BypassFrameworkInstallChecks = nameof(BypassFrameworkInstallChecks);
+        public const string CheckForOverflowUnderflow = nameof(CheckForOverflowUnderflow);
         public const string Configuration = nameof(Configuration);
         public const string CscToolExe = nameof(CscToolExe);
         public const string CscToolPath = nameof(CscToolPath);
@@ -21,7 +22,7 @@
         public const string MSBuildExtensionsPath = nameof(MSBuildExtensionsPath);
         public const string MSBuildSDKsPath = nameof(MSBuildSDKsPath);
         public const string NoWarn = nameof(NoWarn);
-        public const string NullableContextOptions = nameof(NullableContextOptions);
+        public const string Nullable = nameof(Nullable);
         public const string OutputPath = nameof(OutputPath);
         public const string Platform = nameof(Platform);
         public const string ProjectAssetsFile = nameof(ProjectAssetsFile);
@@ -29,6 +30,7 @@
         public const string ProjectGuid = nameof(ProjectGuid);
         public const string ProjectName = nameof(ProjectName);
         public const string _ResolveReferenceDependencies = nameof(_ResolveReferenceDependencies);
+        public const string RootNamespace = nameof(RootNamespace);
         public const string RoslynTargetsPath = nameof(RoslynTargetsPath);
         public const string SignAssembly = nameof(SignAssembly);
         public const string SkipCompilerExecution = nameof(SkipCompilerExecution);

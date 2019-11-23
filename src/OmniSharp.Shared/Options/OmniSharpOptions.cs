@@ -11,6 +11,8 @@ namespace OmniSharp.Options
         public FileOptions FileOptions { get; set; } = new FileOptions();
 
         public RenameOptions RenameOptions { get; set; } = new RenameOptions();
+
+        public OmniSharpExtensionsOptions Plugins { get; set; } = new OmniSharpExtensionsOptions();
     }
 
     public class HackOptions

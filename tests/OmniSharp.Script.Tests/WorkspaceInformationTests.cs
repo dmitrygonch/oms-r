@@ -19,7 +19,7 @@ namespace OmniSharp.Script.Tests
         private static Dictionary<string, string> s_netCoreScriptingConfiguration = new Dictionary<string, string>
         {
             ["script:enableScriptNuGetReferences"] = "true",
-            ["script:defaultTargetFramework"] = "netcoreapp2.1"
+            ["script:defaultTargetFramework"] = "netcoreapp3.0"
         };
 
         public WorkspaceInformationTests(ITestOutputHelper output)
@@ -67,9 +67,9 @@ namespace OmniSharp.Script.Tests
                 Assert.Equal(typeof(CommandLineScriptGlobals), project.GlobalsType);
 
                 // should have RSP inherited settings
-                VerifyAssemblyReference(project, "system.web");
+                VerifyAssemblyReference(project, "system.xml");
                 var commonUsingStatement = Assert.Single(project.CommonUsings);
-                Assert.Equal("System.Web", commonUsingStatement);
+                Assert.Equal("System.Xml", commonUsingStatement);
             }
         }
 

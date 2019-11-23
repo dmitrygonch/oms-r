@@ -35,6 +35,7 @@ namespace OmniSharp.MSBuild.ProjectFile
             public LanguageVersion LanguageVersion { get; }
             public NullableContextOptions NullableContextOptions { get; }
             public bool AllowUnsafeCode { get; }
+            public bool CheckForOverflowUnderflow { get; }
             public string DocumentationFile { get; }
             public ImmutableArray<string> PreprocessorSymbolNames { get; }
             public ImmutableArray<string> SuppressedDiagnosticIds { get; }
@@ -51,6 +52,7 @@ namespace OmniSharp.MSBuild.ProjectFile
             public RuleSet RuleSet { get; }
             public ImmutableDictionary<string, string> ReferenceAliases { get; }
             public bool TreatWarningsAsErrors { get; }
+            public string DefaultNamespace { get; }
 
             private ProjectData()
             {
@@ -79,12 +81,14 @@ namespace OmniSharp.MSBuild.ProjectFile
                 LanguageVersion languageVersion,
                 NullableContextOptions nullableContextOptions,
                 bool allowUnsafeCode,
+                bool checkForOverflowUnderflow,
                 string documentationFile,
                 ImmutableArray<string> preprocessorSymbolNames,
                 ImmutableArray<string> suppressedDiagnosticIds,
                 bool signAssembly,
                 string assemblyOriginatorKeyFile,
                 bool treatWarningsAsErrors,
+                string defaultNamespace,
                 RuleSet ruleset)
                 : this()
             {
@@ -106,6 +110,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 LanguageVersion = languageVersion;
                 NullableContextOptions = nullableContextOptions;
                 AllowUnsafeCode = allowUnsafeCode;
+                CheckForOverflowUnderflow = checkForOverflowUnderflow;
                 DocumentationFile = documentationFile;
                 PreprocessorSymbolNames = preprocessorSymbolNames.EmptyIfDefault();
                 SuppressedDiagnosticIds = suppressedDiagnosticIds.EmptyIfDefault();
@@ -114,6 +119,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 AssemblyOriginatorKeyFile = assemblyOriginatorKeyFile;
                 TreatWarningsAsErrors = treatWarningsAsErrors;
                 RuleSet = ruleset;
+                DefaultNamespace = defaultNamespace;
             }
 
             private ProjectData(
@@ -127,6 +133,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 LanguageVersion languageVersion,
                 NullableContextOptions nullableContextOptions,
                 bool allowUnsafeCode,
+                bool checkForOverflowUnderflow,
                 string documentationFile,
                 ImmutableArray<string> preprocessorSymbolNames,
                 ImmutableArray<string> suppressedDiagnosticIds,
@@ -139,11 +146,12 @@ namespace OmniSharp.MSBuild.ProjectFile
                 ImmutableArray<string> analyzers,
                 ImmutableArray<string> additionalFiles,
                 bool treatWarningsAsErrors,
+                string defaultNamespace,
                 RuleSet ruleset,
                 ImmutableDictionary<string, string> referenceAliases)
                 : this(guid, name, assemblyName, targetPath, outputPath, intermediateOutputPath, projectAssetsFile,
-                      configuration, platform, targetFramework, targetFrameworks, outputKind, languageVersion, nullableContextOptions, allowUnsafeCode,
-                      documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds, signAssembly, assemblyOriginatorKeyFile, treatWarningsAsErrors, ruleset)
+                      configuration, platform, targetFramework, targetFrameworks, outputKind, languageVersion, nullableContextOptions, allowUnsafeCode, checkForOverflowUnderflow,
+                      documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds, signAssembly, assemblyOriginatorKeyFile, treatWarningsAsErrors, defaultNamespace, ruleset)
             {
                 SourceFiles = sourceFiles.EmptyIfDefault();
                 ProjectReferences = projectReferences.EmptyIfDefault();
@@ -165,6 +173,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 var projectAssetsFile = project.GetPropertyValue(PropertyNames.ProjectAssetsFile);
                 var configuration = project.GetPropertyValue(PropertyNames.Configuration);
                 var platform = project.GetPropertyValue(PropertyNames.Platform);
+                var defaultNamespace = project.GetPropertyValue(PropertyNames.RootNamespace);
 
                 var targetFramework = new FrameworkName(project.GetPropertyValue(PropertyNames.TargetFrameworkMoniker));
 
@@ -178,8 +187,9 @@ namespace OmniSharp.MSBuild.ProjectFile
 
                 var languageVersion = PropertyConverter.ToLanguageVersion(project.GetPropertyValue(PropertyNames.LangVersion));
                 var allowUnsafeCode = PropertyConverter.ToBoolean(project.GetPropertyValue(PropertyNames.AllowUnsafeBlocks), defaultValue: false);
+                var checkForOverflowUnderflow = PropertyConverter.ToBoolean(project.GetPropertyValue(PropertyNames.CheckForOverflowUnderflow), defaultValue: false);
                 var outputKind = PropertyConverter.ToOutputKind(project.GetPropertyValue(PropertyNames.OutputType));
-                var nullableContextOptions = PropertyConverter.ToNullableContextOptions(project.GetPropertyValue(PropertyNames.NullableContextOptions));
+                var nullableContextOptions = PropertyConverter.ToNullableContextOptions(project.GetPropertyValue(PropertyNames.Nullable));
                 var documentationFile = project.GetPropertyValue(PropertyNames.DocumentationFile);
                 var preprocessorSymbolNames = PropertyConverter.ToPreprocessorSymbolNames(project.GetPropertyValue(PropertyNames.DefineConstants));
                 var suppressedDiagnosticIds = PropertyConverter.ToSuppressedDiagnosticIds(project.GetPropertyValue(PropertyNames.NoWarn));
@@ -189,8 +199,8 @@ namespace OmniSharp.MSBuild.ProjectFile
 
                 return new ProjectData(
                     guid, name, assemblyName, targetPath, outputPath, intermediateOutputPath, projectAssetsFile,
-                    configuration, platform, targetFramework, targetFrameworks, outputKind, languageVersion, nullableContextOptions, allowUnsafeCode,
-                    documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds, signAssembly, assemblyOriginatorKeyFile, treatWarningsAsErrors, ruleset: null);
+                    configuration, platform, targetFramework, targetFrameworks, outputKind, languageVersion, nullableContextOptions, allowUnsafeCode, checkForOverflowUnderflow,
+                    documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds, signAssembly, assemblyOriginatorKeyFile, treatWarningsAsErrors, defaultNamespace, ruleset: null);
             }
 
             public static ProjectData Create(MSB.Execution.ProjectInstance projectInstance)
@@ -204,6 +214,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 var projectAssetsFile = projectInstance.GetPropertyValue(PropertyNames.ProjectAssetsFile);
                 var configuration = projectInstance.GetPropertyValue(PropertyNames.Configuration);
                 var platform = projectInstance.GetPropertyValue(PropertyNames.Platform);
+                var defaultNamespace = projectInstance.GetPropertyValue(PropertyNames.RootNamespace);
 
                 var targetFramework = new FrameworkName(projectInstance.GetPropertyValue(PropertyNames.TargetFrameworkMoniker));
 
@@ -217,8 +228,9 @@ namespace OmniSharp.MSBuild.ProjectFile
 
                 var languageVersion = PropertyConverter.ToLanguageVersion(projectInstance.GetPropertyValue(PropertyNames.LangVersion));
                 var allowUnsafeCode = PropertyConverter.ToBoolean(projectInstance.GetPropertyValue(PropertyNames.AllowUnsafeBlocks), defaultValue: false);
+                var checkForOverflowUnderflow = PropertyConverter.ToBoolean(projectInstance.GetPropertyValue(PropertyNames.CheckForOverflowUnderflow), defaultValue: false);
                 var outputKind = PropertyConverter.ToOutputKind(projectInstance.GetPropertyValue(PropertyNames.OutputType));
-                var nullableContextOptions = PropertyConverter.ToNullableContextOptions(projectInstance.GetPropertyValue(PropertyNames.NullableContextOptions));
+                var nullableContextOptions = PropertyConverter.ToNullableContextOptions(projectInstance.GetPropertyValue(PropertyNames.Nullable));
                 var documentationFile = projectInstance.GetPropertyValue(PropertyNames.DocumentationFile);
                 var preprocessorSymbolNames = PropertyConverter.ToPreprocessorSymbolNames(projectInstance.GetPropertyValue(PropertyNames.DefineConstants));
                 var suppressedDiagnosticIds = PropertyConverter.ToSuppressedDiagnosticIds(projectInstance.GetPropertyValue(PropertyNames.NoWarn));
@@ -275,9 +287,9 @@ namespace OmniSharp.MSBuild.ProjectFile
                 return new ProjectData(guid, name,
                     assemblyName, targetPath, outputPath, intermediateOutputPath, projectAssetsFile,
                     configuration, platform, targetFramework, targetFrameworks,
-                    outputKind, languageVersion, nullableContextOptions, allowUnsafeCode, documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds,
+                    outputKind, languageVersion, nullableContextOptions, allowUnsafeCode, checkForOverflowUnderflow, documentationFile, preprocessorSymbolNames, suppressedDiagnosticIds,
                     signAssembly, assemblyOriginatorKeyFile,
-                    sourceFiles, projectReferences, references.ToImmutable(), packageReferences, analyzers, additionalFiles, treatWarningsAsErrors, ruleset, referenceAliases.ToImmutableDictionary());
+                    sourceFiles, projectReferences, references.ToImmutable(), packageReferences, analyzers, additionalFiles, treatWarningsAsErrors, defaultNamespace, ruleset, referenceAliases.ToImmutableDictionary());
             }
 
             private static RuleSet ResolveRulesetIfAny(MSB.Execution.ProjectInstance projectInstance)

@@ -27,7 +27,6 @@ nuget.exe
 debugSettings.json
 buildlog
 /.vs
-.vs/
 *.lock.json
 /omnisharp*.tar.gz
 scripts/Omnisharp*
@@ -58,3 +57,4 @@ launchSettings.json
 
 # Rider
 .idea/
+test-assets/**/nugets

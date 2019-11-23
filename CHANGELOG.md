@@ -1,6 +1,44 @@
 # Changelog
 All changes to the project will be documented in this file.
 
+## [1.34.8] - 2019-11-21
+* Update to Roslyn `3.5.0-beta1-19571-01` (PR:[#1653](https://github.com/OmniSharp/omnisharp-roslyn/pull/1653))
+* Support plugins configuration in omnisharp.json (PR:[#1615](https://github.com/OmniSharp/omnisharp-roslyn/pull/1615))
+
+## [1.34.7] - 2019-11-06
+* Updated the embedded Mono to 6.4.0 (PR:[#1640](https://github.com/OmniSharp/omnisharp-roslyn/pull/1640))
+* Update to Roslyn `3.4.0-beta3-19551-02` to align with the upcoming .NET Core 3.1 Preview 3 (PR:[#1644](https://github.com/OmniSharp/omnisharp-roslyn/pull/1644))
+
+## [1.34.6] - 2019-10-25
+* Update to Roslyn `3.4.0-beta3-19516-01` (PR:[#1634](https://github.com/OmniSharp/omnisharp-roslyn/pull/1634))
+* Fixed a bug that caused CS0019 diagnostic to be erroneously reported when comparing to `default` ([#1619](https://github.com/OmniSharp/omnisharp-roslyn/issues/1619), PR:[#1634](https://github.com/OmniSharp/omnisharp-roslyn/pull/1634))
+* Raised minimum Mono version to 6.4.0 to provide better .NET Core 3.0 support ([#1629](https://github.com/OmniSharp/omnisharp-roslyn/pull/1629))
+* Fixed a concurrency bug in scripting/Cake support ([#1627](https://github.com/OmniSharp/omnisharp-roslyn/pull/1627))
+* Correctly respect request cancellation token in metadata service ([#1631](https://github.com/OmniSharp/omnisharp-roslyn/pull/1631))
+
+## [1.34.5] - 2019-10-08
+* Fixed 1.34.4 regression that caused "go to metadata" to not work ([#1624](https://github.com/OmniSharp/omnisharp-roslyn/issues/1624), PR: [#1625](https://github.com/OmniSharp/omnisharp-roslyn/pull/1625))
+* Updated the Dotnet.Script.DependencyModel and Dotnet.Script.DependencyModel.NuGet packages to version 0.50.0 adding support for .NET Core 3.0 based scripts (PR: [#1609](https://github.com/OmniSharp/omnisharp-roslyn/pull/1609))
+
+## [1.34.4] - 2019-09-30
+* Upgraded to MSBuild 16.3 and Mono MSBuild 16.3 (from Mono 6.4.0) to support .NET Core 3.0 RTM (PR: [#1616](https://github.com/OmniSharp/omnisharp-roslyn/pull/1616), [#1612](https://github.com/OmniSharp/omnisharp-roslyn/pull/1612), [#1606](https://github.com/OmniSharp/omnisharp-roslyn/pull/1606))
+* Fixed behavior when there are multiple handlers are defined for a language for a given request (PR: [#1582](https://github.com/OmniSharp/omnisharp-roslyn/pull/1582))
+
+## [1.34.3] - 2019-09-11
+* Added support for `CheckForOverflowUnderflow ` in csproj files (PR: [#1587](https://github.com/OmniSharp/omnisharp-roslyn/pull/1587))
+* Updated LSP libraries to 0.13 which fixes problems with clients not supporting dynamic registrations. ([#1505](https://github.com/OmniSharp/omnisharp-roslyn/issues/1505), [#1525](https://github.com/OmniSharp/omnisharp-roslyn/issues/1525), PR: [#1562](https://github.com/OmniSharp/omnisharp-roslyn/pull/1562))
+* Update to Roslyn `3.4.0-beta1-19460-02` to align with the upcoming .NET Core 3.1 preview 1 (PR:[#1597](https://github.com/OmniSharp/omnisharp-roslyn/pull/1597))
+
+## [1.34.2] - 2019-08-16
+* Update to Roslyn `3.3.0-beta2-19401-05` which fixes a 1.34.1 regression resulting in StackOverflowException on code analysis of partial classes (PR: [#1579](https://github.com/OmniSharp/omnisharp-roslyn/pull/1579))
+* Added support for reading C# 8.0 `Nullable` setting from csproj files (and dropped support for `NullableContextOptions` - based on the LDM decision to [rename the MSBuild property](https://github.com/dotnet/roslyn/issues/35432) ([#1573](https://github.com/OmniSharp/omnisharp-roslyn/pull/1573))
+
+## [1.34.1] - 2019-07-31
+* Added support for "sync namespace" refactoring ([#1475](https://github.com/OmniSharp/omnisharp-roslyn/issues/1475), PR: [#1563](https://github.com/OmniSharp/omnisharp-roslyn/pull/1563))
+* Fixed a regression introduced in 1.32.20 which caused `AllowUnsafeCode` in csproj to also enable `TreatWarningsAsErrors` behavior ([#1565](https://github.com/OmniSharp/omnisharp-roslyn/issues/1565), PR: [#1567](https://github.com/OmniSharp/omnisharp-roslyn/pull/1567))
+* Update to Roslyn `3.3.0-beta2-19376-02` (PR: [#1563](https://github.com/OmniSharp/omnisharp-roslyn/pull/1563))
+* Fixed a timeout issue in large analyzer bundles (i.e. FxCop analyzers) ([#1552](https://github.com/OmniSharp/omnisharp-roslyn/issues/1552), PR: [#1566](https://github.com/OmniSharp/omnisharp-roslyn/pull/1566))
+
 ## [1.34.0] - 2019-07-15
 * Added support for Roslyn code actions that normally need UI - they used to be explicitly sipped by OmniSharp, now it surfaces them with predefined defaults instead. ([#1220](https://github.com/OmniSharp/omnisharp-roslyn/issues/1220), PR: [#1406](https://github.com/OmniSharp/omnisharp-roslyn/pull/1406)) These are:
   * extract interface
@@ -33,7 +71,7 @@ All changes to the project will be documented in this file.
             }
         }
     ```
-* Analyzers improvements (PR: [#1440](https://github.com/OmniSharp/omnisharp-roslyn/pull/1440)) 
+* Analyzers improvements (PR: [#1440](https://github.com/OmniSharp/omnisharp-roslyn/pull/1440))
 	* Dynamically loaded / modifiable rulesets instead without full restart on omnisharp after every change
 	* Reanalyze updated projects
 	* Built-int Roslyn diagnostics can be controlled by rulesets even when analyzers are not enabled

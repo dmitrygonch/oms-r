@@ -1,9 +1,6 @@
 {
-    "dotnet": {
-        "enabled": false
-    },
     "script": {
         "enableScriptNuGetReferences": true,
-        "defaultTargetFramework": "netcoreapp2.1"
+        "defaultTargetFramework": "netcoreapp3.0"
       }
 }

@@ -16,12 +16,13 @@ namespace OmniSharp.MSBuild.ProjectFile
         {
             var compilationOptions = new CSharpCompilationOptions(projectFileInfo.OutputKind);
 
-            compilationOptions = compilationOptions.WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default);
-            compilationOptions = compilationOptions.WithSpecificDiagnosticOptions(projectFileInfo.GetDiagnosticOptions());
+            compilationOptions = compilationOptions.WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default)
+                                    .WithSpecificDiagnosticOptions(projectFileInfo.GetDiagnosticOptions())
+                                    .WithOverflowChecks(projectFileInfo.CheckForOverflowUnderflow);
 
             if (projectFileInfo.AllowUnsafeCode)
             {
-                compilationOptions = compilationOptions.WithAllowUnsafe(true).WithGeneralDiagnosticOption(ReportDiagnostic.Error);
+                compilationOptions = compilationOptions.WithAllowUnsafe(true);
             }
 
             if (projectFileInfo.TreatWarningsAsErrors)
@@ -52,7 +53,6 @@ namespace OmniSharp.MSBuild.ProjectFile
         public static ImmutableDictionary<string, ReportDiagnostic> GetDiagnosticOptions(this ProjectFileInfo projectFileInfo)
         {
             var defaultSuppressions = CompilationOptionsHelper.GetDefaultSuppressedDiagnosticOptions(projectFileInfo.SuppressedDiagnosticIds);
-
             var specificRules = projectFileInfo.RuleSet?.SpecificDiagnosticOptions ?? ImmutableDictionary<string, ReportDiagnostic>.Empty;
 
             return specificRules.Concat(defaultSuppressions.Where(x => !specificRules.Keys.Contains(x.Key))).ToImmutableDictionary();
@@ -71,7 +71,7 @@ namespace OmniSharp.MSBuild.ProjectFile
                 filePath: projectFileInfo.FilePath,
                 outputFilePath: projectFileInfo.TargetPath,
                 compilationOptions: projectFileInfo.CreateCompilationOptions(),
-                analyzerReferences: analyzerReferences);
+                analyzerReferences: analyzerReferences).WithDefaultNamespace(projectFileInfo.DefaultNamespace);
         }
 
         private static IEnumerable<AnalyzerReference> ResolveAnalyzerReferencesForProject(ProjectFileInfo projectFileInfo, IAnalyzerAssemblyLoader analyzerAssemblyLoader)

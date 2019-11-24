@@ -1,5 +1,5 @@
 #addin "nuget:?package=Newtonsoft.Json&version=11.0.2"
-#tool "nuget:?package=GitVersion.CommandLine&prerelease&version=5.0.0-beta2-65"
+#tool "nuget:?package=GitVersion.CommandLine&prerelease&version=5.0.1"
 
 #load "platform.cake"
 
@@ -344,7 +344,6 @@ public class BuildPlan
     public string DotNetInstallScriptURL { get; set; }
     public string DotNetChannel { get; set; }
     public string DotNetVersion { get; set; }
-    public string[] DotNetSharedRuntimeVersions { get; set; }
     public string RequiredMonoVersion { get; set; }
     public string DownloadURL { get; set; }
     public string MonoRuntimeMacOS { get; set; }

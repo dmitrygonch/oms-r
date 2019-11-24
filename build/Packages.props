@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="14.0"
+  xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <PropertyGroup>
-    <MSBuildPackageVersion>16.0.461</MSBuildPackageVersion>
-    <NuGetPackageVersion>5.0.0</NuGetPackageVersion>
-    <RoslynPackageVersion>3.2.0-beta4-19326-12</RoslynPackageVersion>
+    <MSBuildPackageVersion>16.3.0-preview-19426-01</MSBuildPackageVersion>
+    <NuGetPackageVersion>5.2.0</NuGetPackageVersion>
+    <RoslynPackageVersion>3.5.0-beta1-19571-01</RoslynPackageVersion>
     <XunitPackageVersion>2.4.0</XunitPackageVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Update="Cake.Scripting.Transport" Version="0.3.0" />
 
-    <PackageReference Update="Dotnet.Script.DependencyModel" Version="0.6.1" />
-    <PackageReference Update="Dotnet.Script.DependencyModel.NuGet" Version="0.6.2" />
+    <PackageReference Update="Dotnet.Script.DependencyModel" Version="0.50.0" />
+    <PackageReference Update="Dotnet.Script.DependencyModel.NuGet" Version="0.50.0" />
 
     <PackageReference Update="Humanizer" Version="2.2.0" />
     <PackageReference Update="McMaster.Extensions.CommandLineUtils" Version="2.2.4" />
@@ -54,21 +55,21 @@
     <PackageReference Update="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0-preview.1" />
     <PackageReference Update="Microsoft.NET.Test.Sdk" Version="15.7.2" />
     <PackageReference Update="Microsoft.TestPlatform.TranslationLayer" Version="15.7.2" />
-    <PackageReference Update="Microsoft.VisualStudio.Services.Client" Version="16.153.0-preview" />
-    <PackageReference Update="Microsoft.VisualStudio.Services.InteractiveClient" Version="16.153.0-preview" />
-    <PackageReference Update="Microsoft.VisualStudio.Services.Search.Client" Version="16.153.0-preview" />
+    <PackageReference Update="Microsoft.VisualStudio.Services.Client" Version="16.160.1-preview" />
+    <PackageReference Update="Microsoft.VisualStudio.Services.InteractiveClient" Version="16.160.1-preview" />
+    <PackageReference Update="Microsoft.VisualStudio.Services.Search.Client" Version="16.160.1-preview" />
     <PackageReference Update="Microsoft.VisualStudio.CodingConventions" Version="1.1.20180503.2" />
     <PackageReference Update="Microsoft.VisualStudio.Setup.Configuration.Interop" Version="1.14.114" />
     <PackageReference Update="Microsoft.VisualStudio.SDK.EmbedInteropTypes" Version="15.0.12" />
 
-    <PackageReference Update="Newtonsoft.Json" Version="12.0.2" />
+    <PackageReference Update="Newtonsoft.Json" Version="12.0.3" />
 
     <PackageReference Update="Nuget.Packaging" Version="$(NuGetPackageVersion)" />
     <PackageReference Update="Nuget.Packaging.Core" Version="$(NuGetPackageVersion)" />
     <PackageReference Update="Nuget.ProjectModel" Version="$(NuGetPackageVersion)" />
     <PackageReference Update="Nuget.Versioning" Version="$(NuGetPackageVersion)" />
 
-    <PackageReference Update="OmniSharp.Extensions.LanguageServer" Version="0.12.1" />
+    <PackageReference Update="OmniSharp.Extensions.LanguageServer" Version="0.13.1" />
 
     <PackageReference Update="SQLitePCLRaw.bundle_green" Version="1.1.2" />
     <PackageReference Update="System.Collections.Immutable" Version="1.4.0" />

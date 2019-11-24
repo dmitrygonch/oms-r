@@ -77,7 +77,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Signatures
                 }
                 else if (invocation.Receiver is SimpleNameSyntax && invocation.IsInStaticContext)
                 {
-                    methodGroup = methodGroup.Where(m => m.IsStatic);
+                    methodGroup = methodGroup.Where(m => m.IsStatic || m.MethodKind == MethodKind.LocalFunction);
                 }
 
                 foreach (var methodOverload in methodGroup)
@@ -154,7 +154,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Signatures
                     // 1 point for having a parameter
                     score += 1;
                 }
-                else if (invocationEnum.Current.ConvertedType.Equals(definitionEnum.Current.Type))
+                else if (SymbolEqualityComparer.Default.Equals(invocationEnum.Current.ConvertedType, definitionEnum.Current.Type))
                 {
                     // 2 points for having a parameter and being
                     // the same type

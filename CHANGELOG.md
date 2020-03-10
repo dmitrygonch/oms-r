@@ -1,6 +1,51 @@
 # Changelog
 All changes to the project will be documented in this file.
 
+## [1.34.14] - 2020-03-09
+* Added support for `annotations` value of `Nullable` csproj property ([#1721](https://github.com/OmniSharp/omnisharp-roslyn/issues/1721), PR: [#1722](https://github.com/OmniSharp/omnisharp-roslyn/pull/1722))
+* Added ability to specify custom RunSettings for tests (PR: [omnisharp-vscode#3573](https://github.com/OmniSharp/omnisharp-vscode/pull/3573), PR: [#1710](https://github.com/OmniSharp/omnisharp-roslyn/pull/1710))
+
+## [1.34.13] - 2020-02-19
+* Fixed a bug where organizing usings clashed with other formatting settings (PR: [#1715](https://github.com/OmniSharp/omnisharp-roslyn/pull/1713))
+
+## [1.34.12] - 2020-02-18
+* Fixed out of bounds exception in line mapping ([omnisharp-vscode#3485](https://github.com/OmniSharp/omnisharp-vscode/issues/3485), PR: [#1707](https://github.com/OmniSharp/omnisharp-roslyn/pull/1707))
+* Added support for aliases in project references ([#1685](https://github.com/OmniSharp/omnisharp-roslyn/issues/1685), PR: [#1701](https://github.com/OmniSharp/omnisharp-roslyn/pull/1701))
+* Raised the lowest discovered VS2019 version to 16.3 ([#1700](https://github.com/OmniSharp/omnisharp-roslyn/issues/1700), PR: [#1713](https://github.com/OmniSharp/omnisharp-roslyn/pull/1713))
+
+## [1.34.11] - 2020-02-05
+* Updated the bundled to Mono 6.8.0 and MSBuild to be copied from Mono 6.8.0 ([#1693](https://github.com/OmniSharp/omnisharp-roslyn/issues/1693), PR: [#1697](https://github.com/OmniSharp/omnisharp-roslyn/pull/1697))
+* Included NugetSDKResolver in the minimal MSBuild, which introduces support for Nuget based project SDKs like Arcade ([#1678](https://github.com/OmniSharp/omnisharp-roslyn/issues/1678), PR: [#1696](https://github.com/OmniSharp/omnisharp-roslyn/pull/1696))
+
+## [1.34.10] - 2020-01-27
+* Update to Roslyn `3.5.0-beta3-20058-03` (PR: [#1680](https://github.com/OmniSharp/omnisharp-roslyn/pull/1680))
+* Fixed a bug where completion items didn't decode symbols corectly (impacted, for example, object initializer completion quality) ([omnisharp-vscode#3465](https://github.com/OmniSharp/omnisharp-vscode/issues/3465), PR: [#1670](https://github.com/OmniSharp/omnisharp-roslyn/pull/1670))
+* Updated to MsBuild 16.4.0 on Linux/MacOS (PR:[#1669](https://github.com/OmniSharp/omnisharp-roslyn/pull/1669))
+* Added support for implement type options - it is now possible to define whether code-fix/refactoring generated properties should be auto- or throwing-properties and at which place in the class should newly generated members be inserted. They can be set via OmniSharp configuration, such as `omnisharp.json` file. (PR: [#1672](https://github.com/OmniSharp/omnisharp-roslyn/pull/1672))
+    ```JSON
+    {
+        "ImplementTypeOptions": {
+            "PropertyGenerationBehavior": "PreferAutoProperties", // or "PreferThrowingProperties" which is the default
+            "InsertionBehavior": "AtTheEnd" // or "WithOtherMembersOfTheSameKind" which is default
+        }
+    }
+    ```
+* Added support for organizing usings on format. This can be set via OmniSharp configuration, such as `omnisharp.json` file. (PR: [#1686](https://github.com/OmniSharp/omnisharp-roslyn/pull/1686))
+    ```JSON
+    {
+        "FormattingOptions": {
+            "OrganizeImports": true
+        }
+    }
+    ```  
+
+## [1.34.9] - 2019-12-10
+* Updated to MsBuild 16.4.0 on Windows (PR:[#1662](https://github.com/OmniSharp/omnisharp-roslyn/pull/1662))
+* Line pragma is now respected in find references ([#1649](https://github.com/OmniSharp/omnisharp-roslyn/issues/1649), PR:[#1660](https://github.com/OmniSharp/omnisharp-roslyn/pull/1660))
+* Do not set mono paths when running in standalone mode ([omnisharp-vscode#3410](https://github.com/OmniSharp/omnisharp-vscode/issues/3410), [omnisharp-vscode#3340](https://github.com/OmniSharp/omnisharp-vscode/issues/3340), [#1650](https://github.com/OmniSharp/omnisharp-roslyn/issues/1650), PR:[#1656](https://github.com/OmniSharp/omnisharp-roslyn/pull/1656))
+* Fixed a bug where OmniSharp would crash on startup if the path contained `=` sign ([omnisharp-vscode#3436](https://github.com/OmniSharp/omnisharp-vscode/issues/3436), PR:[#1661](https://github.com/OmniSharp/omnisharp-roslyn/pull/1661))
+* Update to Roslyn `3.5.0-beta2-19606-01` (PR:[#1663](https://github.com/OmniSharp/omnisharp-roslyn/pull/1663))
+
 ## [1.34.8] - 2019-11-21
 * Update to Roslyn `3.5.0-beta1-19571-01` (PR:[#1653](https://github.com/OmniSharp/omnisharp-roslyn/pull/1653))
 * Support plugins configuration in omnisharp.json (PR:[#1615](https://github.com/OmniSharp/omnisharp-roslyn/pull/1615))

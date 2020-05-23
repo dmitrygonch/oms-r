@@ -16,14 +16,12 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="All" />
         <PackageReference Include="System.Reactive" />
+        <PackageReference Include="ICSharpCode.Decompiler" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
 
         <PackageReference Include="Microsoft.VisualStudio.Services.InteractiveClient" />
         <PackageReference Include="Microsoft.VisualStudio.Services.Search.Client" />
-
-        <PackageReference Include="Microsoft.VisualStudio.CodingConventions" />
     </ItemGroup>
-
 </Project>

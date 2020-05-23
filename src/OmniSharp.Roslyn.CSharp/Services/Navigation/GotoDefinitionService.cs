@@ -2,39 +2,41 @@ using System;
 using System.Collections.Generic;
 using System.Composition;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions;
 using OmniSharp.Mef;
 using OmniSharp.Models;
 using OmniSharp.Models.GotoDefinition;
 using OmniSharp.Models.Metadata;
+using OmniSharp.Options;
 
 namespace OmniSharp.Roslyn.CSharp.Services.Navigation
 {
     [OmniSharpHandler(OmniSharpEndpoints.GotoDefinition, LanguageNames.CSharp)]
     public class GotoDefinitionService : IRequestHandler<GotoDefinitionRequest, GotoDefinitionResponse>
     {
-        private readonly MetadataHelper _metadataHelper;
-        private readonly OmniSharpWorkspace _workspace;
         private readonly ILogger _logger;
+        private readonly OmniSharpOptions _omnisharpOptions;
+        private readonly OmniSharpWorkspace _workspace;
+        private readonly ExternalSourceServiceFactory _externalSourceServiceFactory;
 
         [ImportingConstructor]
-        public GotoDefinitionService(OmniSharpWorkspace workspace, MetadataHelper metadataHelper, ILoggerFactory loggerFactory)
+        public GotoDefinitionService(ILoggerFactory loggerFactory, OmniSharpWorkspace workspace, ExternalSourceServiceFactory externalSourceServiceFactory, OmniSharpOptions omnisharpOptions)
         {
-            _workspace = workspace;
-            _metadataHelper = metadataHelper;
             _logger = loggerFactory.CreateLogger<GotoDefinitionService>();
+            _workspace = workspace;
+            _externalSourceServiceFactory = externalSourceServiceFactory;
+            _omnisharpOptions = omnisharpOptions;
         }
 
         public async Task<GotoDefinitionResponse> Handle(GotoDefinitionRequest request)
         {
-            var quickFixes = new List<QuickFix>();
-
-            var document = _metadataHelper.FindDocumentInMetadataCache(request.FileName) ??
+            var externalSourceService = _externalSourceServiceFactory.Create(_omnisharpOptions);
+            var document = externalSourceService.FindDocumentInCache(request.FileName) ??
                 _workspace.GetDocument(request.FileName);
 
             var response = new GotoDefinitionResponse();
@@ -48,7 +50,6 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
             if (document != null)
             {
                 var semanticModel = await document.GetSemanticModelAsync();
-                var syntaxTree = semanticModel.SyntaxTree;
                 var sourceText = await document.GetTextAsync();
                 var position = sourceText.Lines.GetPosition(new LinePosition(request.Line, request.Column));
                 var symbol = await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, _workspace);
@@ -86,13 +87,12 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                     }
                     else if (location.IsInMetadata && request.WantMetadata)
                     {
-                        var cancellationSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(request.Timeout));
-                        var (metadataDocument, _) = await _metadataHelper.GetAndAddDocumentFromMetadata(document.Project, symbol, cancellationSource.Token);
+                        var cancellationToken = _externalSourceServiceFactory.CreateCancellationToken(_omnisharpOptions, request.Timeout);
+                        var (metadataDocument, _) = await externalSourceService.GetAndAddExternalSymbolDocument(document.Project, symbol, cancellationToken);
                         if (metadataDocument != null)
                         {
-                            cancellationSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(request.Timeout));
-
-                            var metadataLocation = await _metadataHelper.GetSymbolLocationFromMetadata(symbol, metadataDocument, cancellationSource.Token);
+                            cancellationToken = _externalSourceServiceFactory.CreateCancellationToken(_omnisharpOptions, request.Timeout);
+                            var metadataLocation = await externalSourceService.GetExternalSymbolLocation(symbol, metadataDocument, cancellationToken);
                             var lineSpan = metadataLocation.GetMappedLineSpan();
 
                             response = new GotoDefinitionResponse
@@ -103,7 +103,7 @@ namespace OmniSharp.Roslyn.CSharp.Services.Navigation
                                 {
                                     AssemblyName = symbol.ContainingAssembly.Name,
                                     ProjectName = document.Project.Name,
-                                    TypeName = _metadataHelper.GetSymbolName(symbol)
+                                    TypeName = symbol.GetSymbolName()
                                 },
                             };
                         }

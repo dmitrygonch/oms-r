@@ -10,7 +10,6 @@ using System.Threading.Tasks.Dataflow;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using OmniSharp.Eventing;
 using OmniSharp.FileWatching;
 using OmniSharp.Models.UpdateBuffer;
@@ -18,13 +17,10 @@ using OmniSharp.MSBuild.Logging;
 using OmniSharp.MSBuild.Models.Events;
 using OmniSharp.MSBuild.Notification;
 using OmniSharp.MSBuild.ProjectFile;
-using OmniSharp.Roslyn.CSharp.Services.Diagnostics;
-using OmniSharp.Roslyn.CSharp.Services.Refactoring.V2;
 using OmniSharp.Options;
 using OmniSharp.Roslyn.Utilities;
 using OmniSharp.Services;
 using OmniSharp.Utilities;
-using System.Reflection;
 using Microsoft.CodeAnalysis.Diagnostics;
 using OmniSharp.Roslyn.EditorConfig;
 
@@ -60,6 +56,7 @@ namespace OmniSharp.MSBuild
         private readonly ConcurrentDictionary<string, int/*unused*/> _projectsRequestedOnDemand;
         private readonly ProjectLoader _projectLoader;
         private readonly OmniSharpWorkspace _workspace;
+        private readonly object _workspaceGate = new();
         private readonly ImmutableArray<IMSBuildEventSink> _eventSinks;
         private const int LoopDelay = 100; // milliseconds
         private readonly BufferBlock<ProjectToUpdate> _queue;
@@ -365,14 +362,17 @@ namespace OmniSharp.MSBuild
 
             var projectInfo = projectFileInfo.CreateProjectInfo(_analyzerAssemblyLoader);
 
-            var newSolution = _workspace.CurrentSolution.AddProject(projectInfo);
-            _workspace.AddDocumentInclusionRuleForProject(projectInfo.Id, (filePath) => projectFileInfo.IsFileIncluded(filePath));
-
-            SubscribeToAnalyzerReferenceLoadFailures(projectInfo.AnalyzerReferences.Cast<AnalyzerFileReference>(), _logger);
-
-            if (!_workspace.TryApplyChanges(newSolution))
+            lock (_workspaceGate)
             {
-                _logger.LogError($"Failed to add project to workspace: '{projectFileInfo.FilePath}'");
+                var newSolution = _workspace.CurrentSolution.AddProject(projectInfo);
+                _workspace.AddDocumentInclusionRuleForProject(projectInfo.Id, (filePath) => projectFileInfo.IsFileIncluded(filePath));
+
+                SubscribeToAnalyzerReferenceLoadFailures(projectInfo.AnalyzerReferences.Cast<AnalyzerFileReference>(), _logger);
+
+                if (!_workspace.TryApplyChanges(newSolution))
+                {
+                    _logger.LogError($"Failed to add project to workspace: '{projectFileInfo.FilePath}'");
+                }
             }
 
             WatchProjectFiles(projectFileInfo);
@@ -694,23 +694,26 @@ namespace OmniSharp.MSBuild
 
         private void OnDirectoryFileChanged(string path, FileChangeType changeType)
         {
-            // Hosts may not have passed through a file change type
-            if (changeType == FileChangeType.Unspecified && !File.Exists(path) || changeType == FileChangeType.Delete)
+            lock (_workspaceGate)
             {
-                foreach (var documentId in _workspace.CurrentSolution.GetDocumentIdsWithFilePath(path))
+                // Hosts may not have passed through a file change type
+                if (changeType == FileChangeType.Unspecified && !File.Exists(path) || changeType == FileChangeType.Delete)
                 {
-                    _workspace.RemoveDocument(documentId);
+                    foreach (var documentId in _workspace.CurrentSolution.GetDocumentIdsWithFilePath(path))
+                    {
+                        _workspace.RemoveDocument(documentId);
+                    }
                 }
-            }
 
-            if (changeType == FileChangeType.Unspecified || changeType == FileChangeType.Create || changeType == FileChangeType.Change)
-            {
-                // Only add cs files. Also, make sure the path is a file, and not a directory name that happens to end in ".cs"
-                if (string.Equals(Path.GetExtension(path), ".cs", StringComparison.CurrentCultureIgnoreCase) && File.Exists(path))
+                if (changeType == FileChangeType.Unspecified || changeType == FileChangeType.Create || changeType == FileChangeType.Change)
                 {
-                    // Use the buffer manager to add the new file to the appropriate projects
-                    // Hosts that don't pass the FileChangeType may wind up updating the buffer twice
-                    _workspace.BufferManager.UpdateBufferAsync(new UpdateBufferRequest() { FileName = path, FromDisk = true }, isCreate: changeType == FileChangeType.Create).Wait();
+                    // Only add cs files. Also, make sure the path is a file, and not a directory name that happens to end in ".cs"
+                    if (string.Equals(Path.GetExtension(path), ".cs", StringComparison.CurrentCultureIgnoreCase) && File.Exists(path))
+                    {
+                        // Use the buffer manager to add the new file to the appropriate projects
+                        // Hosts that don't pass the FileChangeType may wind up updating the buffer twice
+                        _workspace.BufferManager.UpdateBufferAsync(new UpdateBufferRequest() { FileName = path, FromDisk = true }, isCreate: changeType == FileChangeType.Create).Wait();
+                    }
                 }
             }
         }

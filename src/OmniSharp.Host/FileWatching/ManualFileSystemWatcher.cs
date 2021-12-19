@@ -1,18 +1,19 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace OmniSharp.FileWatching
 {
     internal partial class ManualFileSystemWatcher : IFileSystemWatcher, IFileSystemNotifier
     {
         private readonly object _gate = new object();
-        private readonly ConcurrentDictionary<string, Callbacks> _callbacksMap;
+        private readonly Dictionary<string, Callbacks> _callbacksMap;
         private readonly Callbacks _folderCallbacks = new Callbacks();
 
         public ManualFileSystemWatcher()
         {
-            _callbacksMap = new ConcurrentDictionary<string, Callbacks>(StringComparer.OrdinalIgnoreCase);
+            _callbacksMap = new Dictionary<string, Callbacks>(StringComparer.OrdinalIgnoreCase);
         }
 
         public void Notify(string filePath, FileChangeType changeType = FileChangeType.Unspecified)
@@ -61,13 +62,16 @@ namespace OmniSharp.FileWatching
                 throw new ArgumentNullException(nameof(callback));
             }
 
-            if (!_callbacksMap.TryGetValue(pathOrExtension, out var callbacks))
+            lock (_gate)
             {
-                callbacks = new Callbacks();
-                _callbacksMap[pathOrExtension] = callbacks;
-            }
+                if (!_callbacksMap.TryGetValue(pathOrExtension, out var callbacks))
+                {
+                    callbacks = new Callbacks();
+                    _callbacksMap.Add(pathOrExtension, callbacks);
+                }
 
-            callbacks.Add(callback);
+                callbacks.Add(callback);
+            }
         }
     }
 }

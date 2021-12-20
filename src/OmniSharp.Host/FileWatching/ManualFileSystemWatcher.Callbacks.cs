@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Collections.Generic;
 
 namespace OmniSharp.FileWatching
 {
@@ -6,18 +6,22 @@ namespace OmniSharp.FileWatching
     {
         private class Callbacks
         {
-            private readonly ConcurrentDictionary<FileSystemNotificationCallback, byte> _callbacks = new();
+            private List<FileSystemNotificationCallback> _callbacks = new List<FileSystemNotificationCallback>();
+            private HashSet<FileSystemNotificationCallback> _callbackSet = new HashSet<FileSystemNotificationCallback>();
 
             public void Add(FileSystemNotificationCallback callback)
             {
-                _callbacks[callback] = 0;
+                if (_callbackSet.Add(callback))
+                {
+                    _callbacks.Add(callback);
+                }
             }
 
             public void Invoke(string filePath, FileChangeType changeType)
             {
                 foreach (var callback in _callbacks)
                 {
-                    callback.Key(filePath, changeType);
+                    callback(filePath, changeType);
                 }
             }
         }

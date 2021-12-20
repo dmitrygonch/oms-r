@@ -1,42 +1,47 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace OmniSharp.FileWatching
 {
     internal partial class ManualFileSystemWatcher : IFileSystemWatcher, IFileSystemNotifier
     {
-        private readonly ConcurrentDictionary<string, Callbacks> _callbacksMap;
-        private readonly Callbacks _folderCallbacks = new();
+        private readonly object _gate = new object();
+        private readonly Dictionary<string, Callbacks> _callbacksMap;
+        private readonly Callbacks _folderCallbacks = new Callbacks();
 
         public ManualFileSystemWatcher()
         {
-            _callbacksMap = new ConcurrentDictionary<string, Callbacks>(StringComparer.OrdinalIgnoreCase);
+            _callbacksMap = new Dictionary<string, Callbacks>(StringComparer.OrdinalIgnoreCase);
         }
 
         public void Notify(string filePath, FileChangeType changeType = FileChangeType.Unspecified)
         {
-            if(changeType == FileChangeType.DirectoryDelete)
+            lock (_gate)
             {
-                _folderCallbacks.Invoke(filePath, FileChangeType.DirectoryDelete);
-            }
+                if(changeType == FileChangeType.DirectoryDelete)
+                {
+                    _folderCallbacks.Invoke(filePath, FileChangeType.DirectoryDelete);
+                }
 
-            if (_callbacksMap.TryGetValue(filePath, out var fileCallbacks))
-            {
-                fileCallbacks.Invoke(filePath, changeType);
-            }
+                if (_callbacksMap.TryGetValue(filePath, out var fileCallbacks))
+                {
+                    fileCallbacks.Invoke(filePath, changeType);
+                }
 
-            var directoryPath = Path.GetDirectoryName(filePath);
-            if (_callbacksMap.TryGetValue(directoryPath, out var directoryCallbacks))
-            {
-                directoryCallbacks.Invoke(filePath, changeType);
-            }
+                var directoryPath = Path.GetDirectoryName(filePath);
+                if (_callbacksMap.TryGetValue(directoryPath, out var directoryCallbacks))
+                {
+                    directoryCallbacks.Invoke(filePath, changeType);
+                }
 
-            var extension = Path.GetExtension(filePath);
-            if (!string.IsNullOrEmpty(extension) &&
-                _callbacksMap.TryGetValue(extension, out var extensionCallbacks))
-            {
-                extensionCallbacks.Invoke(filePath, changeType);
+                var extension = Path.GetExtension(filePath);
+                if (!string.IsNullOrEmpty(extension) &&
+                    _callbacksMap.TryGetValue(extension, out var extensionCallbacks))
+                {
+                    extensionCallbacks.Invoke(filePath, changeType);
+                }
             }
         }
 
@@ -57,13 +62,16 @@ namespace OmniSharp.FileWatching
                 throw new ArgumentNullException(nameof(callback));
             }
 
-            if (!_callbacksMap.TryGetValue(pathOrExtension, out var callbacks))
+            lock (_gate)
             {
-                callbacks = new Callbacks();
-                _callbacksMap[pathOrExtension] = callbacks;
-            }
+                if (!_callbacksMap.TryGetValue(pathOrExtension, out var callbacks))
+                {
+                    callbacks = new Callbacks();
+                    _callbacksMap.Add(pathOrExtension, callbacks);
+                }
 
-            callbacks.Add(callback);
+                callbacks.Add(callback);
+            }
         }
     }
 }

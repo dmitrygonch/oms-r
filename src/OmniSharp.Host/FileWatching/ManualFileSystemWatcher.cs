@@ -6,9 +6,8 @@ namespace OmniSharp.FileWatching
 {
     internal partial class ManualFileSystemWatcher : IFileSystemWatcher, IFileSystemNotifier
     {
-        private readonly object _gate = new object();
         private readonly ConcurrentDictionary<string, Callbacks> _callbacksMap;
-        private readonly Callbacks _folderCallbacks = new Callbacks();
+        private readonly Callbacks _folderCallbacks = new();
 
         public ManualFileSystemWatcher()
         {
@@ -17,30 +16,27 @@ namespace OmniSharp.FileWatching
 
         public void Notify(string filePath, FileChangeType changeType = FileChangeType.Unspecified)
         {
-            lock (_gate)
+            if(changeType == FileChangeType.DirectoryDelete)
             {
-                if(changeType == FileChangeType.DirectoryDelete)
-                {
-                    _folderCallbacks.Invoke(filePath, FileChangeType.DirectoryDelete);
-                }
+                _folderCallbacks.Invoke(filePath, FileChangeType.DirectoryDelete);
+            }
 
-                if (_callbacksMap.TryGetValue(filePath, out var fileCallbacks))
-                {
-                    fileCallbacks.Invoke(filePath, changeType);
-                }
+            if (_callbacksMap.TryGetValue(filePath, out var fileCallbacks))
+            {
+                fileCallbacks.Invoke(filePath, changeType);
+            }
 
-                var directoryPath = Path.GetDirectoryName(filePath);
-                if (_callbacksMap.TryGetValue(directoryPath, out var directoryCallbacks))
-                {
-                    directoryCallbacks.Invoke(filePath, changeType);
-                }
+            var directoryPath = Path.GetDirectoryName(filePath);
+            if (_callbacksMap.TryGetValue(directoryPath, out var directoryCallbacks))
+            {
+                directoryCallbacks.Invoke(filePath, changeType);
+            }
 
-                var extension = Path.GetExtension(filePath);
-                if (!string.IsNullOrEmpty(extension) &&
-                    _callbacksMap.TryGetValue(extension, out var extensionCallbacks))
-                {
-                    extensionCallbacks.Invoke(filePath, changeType);
-                }
+            var extension = Path.GetExtension(filePath);
+            if (!string.IsNullOrEmpty(extension) &&
+                _callbacksMap.TryGetValue(extension, out var extensionCallbacks))
+            {
+                extensionCallbacks.Invoke(filePath, changeType);
             }
         }
 
